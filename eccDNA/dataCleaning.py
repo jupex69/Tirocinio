@@ -1,54 +1,60 @@
 import pandas as pd
 import os
 
-print("--- FASE 1: CARICAMENTO DATI ---")
-metadata_path = "data/processed/eccdna_disease_detection_metadata.tsv"
-print(f"Lettura del dataset originale da: {metadata_path}...")
+print("--- FASE 1: INIZIALIZZAZIONE ---")
+input_path = "data/processed/eccdna_disease_detection_metadata.tsv"
+output_path = "data/processed/eccdna_metadata_CLEAN.tsv"
 
-# Caricamento del dataset (low_memory=False per gestire tipi misti)
-df = pd.read_csv(metadata_path, sep="\t", low_memory=False)
-print(f"Dataset caricato: {len(df)} righe e {len(df.columns)} colonne.")
+print(f"Lettura a blocchi (Chunking) da: {input_path}...")
 
-print("\n--- FASE 2: PULIZIA E CORREZIONE ---")
-
-# 1. Unificazione delle etichette (Risoluzione dei refusi)
-print("1. Correzione dei refusi nei nomi delle malattie...")
-# Sostituiamo 'Health' con 'Healthy'
-df['disease'] = df['disease'].replace({'Health': 'Healthy'})
-# Uniformiamo il formato: tutto minuscolo con la prima lettera maiuscola
-df['disease'] = df['disease'].str.capitalize() 
-
-# 2. Gestione Valori Mancanti
-print("2. Riempimento dei valori nulli in 'tissue'...")
-df['tissue'] = df['tissue'].fillna('Unknown')
-
-# 3. Rimozione Bias e Feature Inutili
-print("3. Selezione delle feature (Rimozione 'length' e colonne inutili)...")
+# Definiamo le colonne da tenere (abbiamo escluso 'length' e 'tissue')
 colonne_da_tenere = [
-    "id",                     # Identificativo unico (collega al FASTA)
-    "split_cluster",          # Fondamentale per non mischiare Train/Val/Test
-    "disease",                # Target specifico (vitale per le Triplette)
-    "disease_binary_label",   # Target binario (Sano vs Malato)
-    "chrom",                  # Descrittore genomico
-    "start",                  # Descrittore genomico
-    "end",                    # Descrittore genomico
-    "gc",                     # Descrittore statistico
-    "tissue"                  # Metadato biologico ripulito
+    "id", 
+    "split_cluster", 
+    "disease", 
+    "disease_binary_label", 
+    "chrom", 
+    "start", 
+    "end", 
+    "gc"
 ]
 
-# Riduciamo il dataframe solo all'essenziale
-df_clean = df[colonne_da_tenere]
+# Dimensione del blocco: 250.000 righe alla volta è un numero sicurissimo per la RAM
+chunk_size = 250000 
+righe_totali_salvate = 0
+primo_blocco = True
 
-# 4. Pulizia anomalie 
-print("4. Rimozione di eventuali righe senza descrittori genomici validi...")
-# Se per qualche motivo manca il GC o le coordinate, la riga è inservibile
-df_clean = df_clean.dropna(subset=["gc", "chrom", "start", "end"])
+print("\n--- FASE 2: PULIZIA E SALVATAGGIO IN TEMPO REALE ---")
 
-print("\n--- FASE 3: SALVATAGGIO ---")
-# Creiamo il percorso per il file pulito
-output_path = "data/processed/eccdna_metadata_CLEAN.tsv"
-df_clean.to_csv(output_path, sep="\t", index=False)
+# Iteriamo sul file leggendolo a blocchi
+for i, chunk in enumerate(pd.read_csv(input_path, sep="\t", chunksize=chunk_size, low_memory=False)):
+    print(f"🔄 Elaborazione blocco {i+1} (Righe elaborate finora: {i * chunk_size})...")
+    
+    # 1. Correzione dei refusi
+    if 'disease' in chunk.columns:
+        chunk['disease'] = chunk['disease'].replace({'Health': 'Healthy'})
+        chunk['disease'] = chunk['disease'].astype(str).str.capitalize()
+    
+    # 2. Selezione chirurgica (teniamo solo le colonne che ci servono)
+    # Assicuriamoci che tutte le colonne richieste esistano nel blocco
+    colonne_presenti = [col for col in colonne_da_tenere if col in chunk.columns]
+    chunk_clean = chunk[colonne_presenti]
+    
+    # 3. Pulizia anomalie (via le righe senza descrittori genomici validi)
+    subset_dropna = [col for col in ["gc", "chrom", "start", "end"] if col in chunk_clean.columns]
+    chunk_clean = chunk_clean.dropna(subset=subset_dropna)
+    
+    # 4. Salvataggio su disco (Append)
+    if primo_blocco:
+        # Il primo blocco crea il file e scrive l'intestazione (header)
+        chunk_clean.to_csv(output_path, sep="\t", index=False, mode='w', header=True)
+        primo_blocco = False
+    else:
+        # I blocchi successivi si accodano al file senza riscrivere l'intestazione
+        chunk_clean.to_csv(output_path, sep="\t", index=False, mode='a', header=False)
+        
+    righe_totali_salvate += len(chunk_clean)
 
-print(f"✅ Data Cleaning completato con successo!")
+print("\n--- FASE 3: COMPLETAMENTO ---")
 print(f"Il nuovo dataset pulito è stato salvato in: {output_path}")
-print(f"Dimensioni finali: {len(df_clean)} righe e {len(df_clean.columns)} colonne.")
+print(f"Sono state salvate {righe_totali_salvate} righe perfettamente pulite.")

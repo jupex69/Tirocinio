@@ -2,3 +2,8 @@ da farsi.txt
 README_disease_detection.zip
 eccDNA/data/processed/*.fa
 eccDNA/data/processed/*.tsv
+eccDNA/eda_plots/01_class_distribution.png
+eccDNA/eda_plots/02_gc_distribution.png
+eccDNA/eda_plots/03_length_distribution.png
+eccDNA/eda_plots/04_chromosome_distribution.png
+eccDNA/eda_plots/04_feature_importanza.png
