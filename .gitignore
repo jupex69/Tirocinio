@@ -1,2 +1,4 @@
 da farsi.txt
 README_disease_detection.zip
+eccDNA/data/processed/*.fa
+eccDNA/data/processed/*.tsv
