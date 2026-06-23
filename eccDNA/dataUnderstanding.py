@@ -1,29 +1,38 @@
 import pandas as pd
-import matplotlib.pyplot as plt
-import seaborn as sns
 import numpy as np
-import os
-import random
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.preprocessing import LabelEncoder
 
-print("--- FASE 1: INIZIALIZZAZIONE E CARICAMENTO (RAM-SAFE) ---")
-os.makedirs('eda_plots', exist_ok=True)
+print("--- FASE 1: INIZIALIZZAZIONE E CARICAMENTO A BLOCCHI ---")
 metadata_path = "data/processed/eccdna_disease_detection_metadata.tsv"
-print("Lettura intelligente del dataset (campionamento del 5% in tempo reale)...")
 
-# TRUCCO RAM-SAFE: Leggiamo solo il 5% delle righe casualmente
-prob_to_keep = 0.05
-df = pd.read_csv(
-    metadata_path, 
-    sep="\t", 
-    header=0, 
-    skiprows=lambda i: i > 0 and random.random() > prob_to_keep,
-    low_memory=False
-)
-print(f"Dataset caricato in sicurezza! Dimensioni del campione: {len(df)} righe e {len(df.columns)} colonne.")
+print("Lettura del dataset in blocchi da 250.000 righe...")
 
-print("\n--- FASE 2: DATA UNDERSTANDING COMPLETO ---")
+# Colonne vitali per l'EDA. Scartiamo fin da subito i pesanti ID e le colonne inutili.
+colonne_analisi = ['disease', 'disease_binary_label', 'length', 'gc', 'chrom', 'tissue', 'start', 'end']
+
+chunk_size = 250000
+lista_blocchi = []
+righe_totali = 0
+
+# Iteriamo leggendo tutto il file a blocchi
+for i, chunk in enumerate(pd.read_csv(metadata_path, sep="\t", chunksize=chunk_size, low_memory=False)):
+    print(f"🔄 Elaborazione blocco {i+1}...")
+    righe_totali += len(chunk)
+    
+    # Teniamo solo le colonne che ci interessano (se esistono nel blocco)
+    colonne_presenti = [col for col in colonne_analisi if col in chunk.columns]
+    chunk_snello = chunk[colonne_presenti]
+    
+    # Aggiungiamo il blocco snellito alla nostra lista
+    lista_blocchi.append(chunk_snello)
+
+# Uniamo tutti i blocchi in un unico DataFrame
+df = pd.concat(lista_blocchi, ignore_index=True)
+
+print(f"\n✅ Lettura completata! Abbiamo in memoria il 100% dei dati ({len(df)} righe).")
+
+print("\n--- FASE 2: DATA UNDERSTANDING COMPLETO (ESATTO SUL 100%) ---")
 
 print("\n1. Valori Mancanti (Nulli) per colonna:")
 nulls = df.isnull().sum()
@@ -46,47 +55,14 @@ for col in categorical_cols:
     for nome, perc in conteggi.items():
         print(f"    * {nome}: {perc:.1f}%")
 
-print("\n--- FASE 3: GENERAZIONE GRAFICI E DISTRIBUZIONI ---")
-print("Elaborazione dei grafici in corso (attendere)...")
+print("\n--- FASE 3: ANALISI DELLE DIPENDENZE (FEATURE IMPORTANCE) ---")
+print("Calcolo del peso delle variabili rispetto al target (su un campione RAM-Safe di 150.000 righe)...")
 
-# Creiamo una copia per sicurezza e impostiamo lo stile
-df_plot = df.copy()
-df_plot['Target'] = df_plot['disease_binary_label'].map({0: 'Healthy', 1: 'Disease'})
-sns.set_theme(style="whitegrid", palette="muted")
+# TRUCCO RAM-SAFE: Estraiamo un campione rappresentativo per la Random Forest
+df_rf = df.sample(n=min(150000, len(df)), random_state=42).copy()
 
-# Grafico 1: Bilanciamento
-plt.figure(figsize=(8, 5))
-ax = sns.countplot(data=df_plot, x='Target', order=['Healthy', 'Disease'])
-plt.title('Distribuzione Sani vs Malati (sul campione)')
-plt.savefig('eda_plots/01_class_distribution.png', dpi=300)
-plt.close()
-
-# Grafico 2: GC Content
-if 'gc' in df_plot.columns:
-    plt.figure(figsize=(10, 6))
-    sns.kdeplot(data=df_plot, x='gc', hue='Target', fill=True, common_norm=False, alpha=0.5)
-    plt.title('Distribuzione del Contenuto GC')
-    plt.savefig('eda_plots/02_gc_distribution.png', dpi=300)
-    plt.close()
-
-# Grafico 3: Lunghezza (Log10)
-if 'length' in df_plot.columns:
-    plt.figure(figsize=(10, 6))
-    df_plot['log_length'] = np.log10(df_plot['length'] + 1)
-    sns.kdeplot(data=df_plot, x='log_length', hue='Target', fill=True, common_norm=False, alpha=0.5)
-    plt.title('Distribuzione della Lunghezza eccDNA (Scala Log10)')
-    plt.savefig('eda_plots/03_length_distribution.png', dpi=300)
-    plt.close()
-
-print("Grafici delle distribuzioni salvati.")
-
-print("\n--- FASE 4: ANALISI DELLE DIPENDENZE (FEATURE IMPORTANCE) ---")
-print("Calcolo del peso delle variabili rispetto al target...")
-
-# Pulizia veloce e codifica sul campione per il modello spia
-df_rf = df_plot.copy()
+# Pulizia e preparazione per il modello spia
 df_rf['tissue'] = df_rf['tissue'].fillna('Unknown')
-# Teniamo solo le colonne che hanno senso confrontare
 df_rf = df_rf.dropna(subset=['length', 'gc', 'start', 'end', 'chrom', 'tissue'])
 
 le = LabelEncoder()
@@ -111,13 +87,4 @@ df_importanza = pd.DataFrame({
 print("\nCLASSIFICA DIPENDENZA DAL TARGET (0-100%):")
 print(df_importanza.to_string(index=False))
 
-# Grafico 4: Feature Importance
-plt.figure(figsize=(10, 6))
-sns.barplot(data=df_importanza, x='Importanza (%)', y='Feature', palette='viridis')
-plt.title('Dipendenza delle Feature dal Target', fontsize=14)
-plt.tight_layout()
-plt.savefig('eda_plots/04_feature_importanza.png', dpi=300)
-plt.close()
-
-print("\n✅ Grafico delle dipendenze salvato come '04_feature_importanza.png'")
 print("\n--- ANALISI COMPLETATA ---")
