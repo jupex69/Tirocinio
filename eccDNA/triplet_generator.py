@@ -1,3 +1,31 @@
+"""Genera triplette (anchor, positive, negative) bilanciate, pensate per
+un eventuale futuro approccio a triplet loss / rete siamese.
+
+Cosa fa: parte da data/processed/eccdna_metadata_CLEAN.tsv, tiene solo
+gli id sopravvissuti all'estrazione dei k-meri (eccdna_kmer_3_features.tsv),
+suddivide in train/val/test secondo la colonna split_cluster gia'
+presente nei dati, e per ciascuno split genera triplette dove META' ha
+un'ancora malata (positivo=malato, negativo=sano) e META' un'ancora sana
+(positivo=sano, negativo=malato). Salva in
+data/triplets/{train,val,test}_triplets.csv.
+
+Come lo fa: generate_smart_triplets() bilancia i malati non a caso, ma
+sceglie prima uniformemente un TIPO di malattia e poi un id da quel tipo
+(pick_random_disease_id) - questo evita che il Cancro Gastrico (~77%
+dei casi malati nel dataset) domini le triplette.
+
+Altre info: QUESTO SCRIPT NON E' PIU' LA VIA PRINCIPALE del progetto.
+La direzione attuale e' un classificatore diretto sano/malato
+(build_classification_dataset.py + model.py + train_classifier.py),
+coerente con la letteratura di riferimento (DeepCircle, ECCNET,
+eccDNAMamba, DeepECC, ScanTecc), che non usa triplet loss. Questo
+script e i CSV che produce restano nel repo come asset gia' generato,
+potenzialmente utile per un futuro approccio a embedding, ma non
+vengono piu' toccati/rigenerati per non invalidare i triplet CSV gia'
+committati (la logica random qui dentro e' volutamente indipendente da
+quella di eccdna_utils.sample_balanced_ids).
+"""
+
 import pandas as pd
 import random
 import os

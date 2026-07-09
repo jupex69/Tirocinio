@@ -1,3 +1,26 @@
+"""Pulisce i metadati grezzi delle eccDNA per tutta la pipeline a valle.
+
+Cosa fa: legge data/processed/eccdna_disease_detection_metadata.tsv,
+tiene solo le colonne id, split_cluster, disease, disease_class,
+disease_binary_label, chrom, start, end, gc, scarta le righe senza
+gc/chrom/start/end validi, e salva il risultato in
+data/processed/eccdna_metadata_CLEAN.tsv.
+
+Come lo fa: lettura a blocchi (chunk da 250.000 righe) con pandas per
+restare RAM-safe su un file di ~1,3GB/3,7M righe; ogni blocco viene
+pulito e accodato subito su disco (append) invece di accumulare tutto
+in memoria.
+
+Altre info: le colonne tissue, cell_line, length e sample sono escluse
+DI PROPOSITO, non per dimenticanza - dataUnderstanding.py ha mostrato
+che tissue e' quasi un proxy diretto della disease (data leakage), si
+veda il "modello spia" RandomForest in quello script. La colonna
+disease_class e' una versione normalizzata (minuscolo, snake_case) di
+disease, pensata per un futuro training multiclasse; non unisce
+categorie diverse (es. "Stomach" e "Gastric cancer" restano separate)
+perche' non e' garantito che siano biologicamente equivalenti.
+"""
+
 import pandas as pd
 import os
 
@@ -9,13 +32,14 @@ print(f"Lettura a blocchi (Chunking) da: {input_path}...")
 
 # Definiamo le colonne da tenere (abbiamo escluso 'length' e 'tissue')
 colonne_da_tenere = [
-    "id", 
-    "split_cluster", 
-    "disease", 
-    "disease_binary_label", 
-    "chrom", 
-    "start", 
-    "end", 
+    "id",
+    "split_cluster",
+    "disease",
+    "disease_class",
+    "disease_binary_label",
+    "chrom",
+    "start",
+    "end",
     "gc"
 ]
 
@@ -34,7 +58,20 @@ for i, chunk in enumerate(pd.read_csv(input_path, sep="\t", chunksize=chunk_size
     if 'disease' in chunk.columns:
         chunk['disease'] = chunk['disease'].replace({'Health': 'Healthy'})
         chunk['disease'] = chunk['disease'].astype(str).str.capitalize()
-    
+
+        # Colonna 'disease_class' normalizzata (minuscolo, snake_case),
+        # come suggerito dal README per un futuro training multiclasse.
+        # NOTA: normalizza solo maiuscole/spazi, non unisce categorie
+        # diverse (es. "Stomach cancer" e "Gastric cancer" restano distinte)
+        # perche' non e' garantito che siano biologicamente equivalenti.
+        chunk['disease_class'] = (
+            chunk['disease']
+            .str.strip()
+            .str.lower()
+            .str.replace(r'[^a-z0-9]+', '_', regex=True)
+            .str.strip('_')
+        )
+
     # 2. Selezione chirurgica (teniamo solo le colonne che ci servono)
     # Assicuriamoci che tutte le colonne richieste esistano nel blocco
     colonne_presenti = [col for col in colonne_da_tenere if col in chunk.columns]

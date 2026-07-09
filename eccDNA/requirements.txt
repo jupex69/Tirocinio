@@ -1,0 +1,9 @@
+# Dipendenze del progetto eccDNA, per l'ambiente conda "ecc_Dna_hotspot".
+# Installazione: conda activate ecc_Dna_hotspot && pip install -r requirements.txt
+# torch e' la build CPU (nessuna GPU NVIDIA disponibile su questa macchina).
+pandas>=2.0
+numpy>=1.24
+scikit-learn>=1.3
+torch>=2.2
+matplotlib>=3.7
+tqdm>=4.65

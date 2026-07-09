@@ -7,3 +7,14 @@ eccDNA/eda_plots/02_gc_distribution.png
 eccDNA/eda_plots/03_length_distribution.png
 eccDNA/eda_plots/04_chromosome_distribution.png
 eccDNA/eda_plots/04_feature_importanza.png
+
+# bytecode compilato, mai utile da versionare
+__pycache__/
+*.pyc
+
+# configurazione locale dello strumento Claude Code, non va condivisa
+.claude/
+eccDNA/CLAUDE.md
+
+# PDF dei paper di riferimento: solo materiale bibliografico, non codice
+*.pdf

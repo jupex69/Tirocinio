@@ -1,3 +1,24 @@
+"""Analisi esplorativa (EDA) e rilevamento di data leakage sui metadati
+grezzi delle eccDNA, PRIMA di qualunque pulizia.
+
+Cosa fa: legge data/processed/eccdna_disease_detection_metadata.tsv per
+intero (a blocchi), riporta valori mancanti, statistiche sulle feature
+numeriche (length, gc, start, end) e le frequenze delle feature
+categoriche (disease, chrom, tissue, ...). Poi allena un RandomForest
+"spia" per stimare quanto ciascuna feature (length, gc, start, end,
+chrom, tissue) e' predittiva della label disease_binary_label.
+
+Come lo fa: lettura a blocchi da 250.000 righe per restare RAM-safe sul
+file completo (~3,7M righe); il RandomForest viene invece allenato su
+un campione di 150.000 righe (troppo pesante su tutto il dataset).
+
+Altre info: e' questo script che ha rivelato che 'tissue' e' quasi un
+proxy diretto della disease (alta feature importance) - per questo
+dataCleaning.py lo esclude di proposito dal dataset pulito. Lo script e'
+puramente di analisi/diagnostica: non produce file di output e non fa
+parte della catena dati -> modello.
+"""
+
 import pandas as pd
 import numpy as np
 from sklearn.ensemble import RandomForestClassifier
