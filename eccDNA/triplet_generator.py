@@ -1,98 +1,96 @@
 import pandas as pd
-import numpy as np
 import random
-from sklearn.preprocessing import StandardScaler
 import os
 
-print("--- FASE 1: CARICAMENTO DATI PULITI ---")
-input_path = "data/processed/eccdna_metadata_CLEAN.tsv"
-df = pd.read_csv(input_path, sep="\t", low_memory=False)
+print("--- FASE 1: CARICAMENTO E SINCRONIZZAZIONE DATI ---")
+# Carichiamo i metadati puliti
+metadata_path = "data/processed/eccdna_metadata_CLEAN.tsv"
+df_meta = pd.read_csv(metadata_path, sep="\t", low_memory=False)
 
-print(f"Dataset caricato: {len(df)} righe. Inizio separazione tramite 'split_cluster'...")
+# Siccome l'estrattore ha scartato ~5200 sequenze anomale, dobbiamo assicurarci 
+# di usare SOLO gli ID che sono sopravvissuti e salvati nel file delle feature.
+kmer_features_path = "data/processed/eccdna_kmer_3_features.tsv"
+print("Lettura degli ID validi dal file dei k-meri...")
+# Leggiamo solo la colonna 'id' per non intasarci la RAM
+df_valid_ids = pd.read_csv(kmer_features_path, sep="\t", usecols=['id'])
+valid_ids_set = set(df_valid_ids['id'].astype(str))
 
-# Separiamo rigorosamente i dati rispettando i cluster del tutor
-df_train = df[df['split_cluster'] == 'train'].copy()
-df_val = df[df['split_cluster'] == 'val'].copy()
-df_test = df[df['split_cluster'] == 'test'].copy()
+# Filtriamo i metadati mantenendo solo i sopravvissuti
+df_meta = df_meta[df_meta['id'].astype(str).isin(valid_ids_set)].copy()
+print(f"Metadati sincronizzati: {len(df_meta)} righe pronte per il bilanciamento.")
 
-print(f"Dimensioni: Train={len(df_train)}, Val={len(df_val)}, Test={len(df_test)}")
+print("\n--- FASE 2: PREPARAZIONE DEGLI SPLIT ---")
+df_train = df_meta[df_meta['split_cluster'] == 'train'].copy()
+df_val = df_meta[df_meta['split_cluster'] == 'val'].copy()
+df_test = df_meta[df_meta['split_cluster'] == 'test'].copy()
 
-print("\n--- FASE 2: FEATURE SCALING (Senza Data Leakage) ---")
-# Le coordinate sono a 8 cifre, il GC è tra 0 e 1. Dobbiamo scalarle!
-# IMPORTANTE: Addestriamo lo scaler SOLO sul Train per evitare leakage
-scaler = StandardScaler()
 
-colonne_da_scalare = ['start', 'end']
-# Calcola media e varianza SOLO sul train
-scaler.fit(df_train[colonne_da_scalare])
-
-# Applica la trasformazione a tutti e tre gli split
-df_train[colonne_da_scalare] = scaler.transform(df_train[colonne_da_scalare])
-df_val[colonne_da_scalare] = scaler.transform(df_val[colonne_da_scalare])
-df_test[colonne_da_scalare] = scaler.transform(df_test[colonne_da_scalare])
-
-print("Scaling di 'start' ed 'end' completato con successo (Z-score).")
-
-print("\n--- FASE 3: GENERAZIONE TRIPLETTE (CON BILANCIAMENTO) ---")
-
-def generate_balanced_triplets(data, num_triplets):
+def generate_smart_triplets(df_split, num_triplets):
     """
-    Genera triplette (Ancora, Positivo, Negativo) bilanciando perfettamente
-    le classi Sano (0) e Malato (1) come Ancora.
+    Genera triplette bilanciando perfettamente Sani/Malati e,
+    all'interno dei malati, bilanciando uniformemente le diverse malattie
+    per azzerare il bias del Cancro allo Stomaco.
     """
-    sani = data[data['disease_binary_label'] == 0]['id'].tolist()
-    malati = data[data['disease_binary_label'] == 1]['id'].tolist()
+    # 1. Isoliamo i Sani
+    sani_ids = df_split[df_split['disease_binary_label'] == 0]['id'].tolist()
     
+    # 2. Raggruppiamo i Malati per tipo di malattia (Il trucco del Tutor)
+    df_malati = df_split[df_split['disease_binary_label'] == 1]
+    tipi_di_malattie = df_malati['disease'].unique().tolist()
+    
+    malati_per_tipo = {}
+    for malattia in tipi_di_malattie:
+        malati_per_tipo[malattia] = df_malati[df_malati['disease'] == malattia]['id'].tolist()
+        
+    def pick_random_disease_id():
+        # Sceglie uniformemente un TIPO di malattia (Gastrico, Seno, ecc. hanno la stessa chance 1/N)
+        scelta_malattia = random.choice(tipi_di_malattie)
+        # Poi pesca un ID a caso da quel gruppo specifico
+        return random.choice(malati_per_tipo[scelta_malattia])
+
     triplets = []
-    
-    # Metà delle triplette avrà un'ancora Sana, metà un'ancora Malata (Balancing)
     half_size = num_triplets // 2
     
-    # 1. Generazione triplette con Ancora MALATA (Disease)
+    # --- METÀ 1: Ancora Malata (Positivo=Malato, Negativo=Sano) ---
     for _ in range(half_size):
-        anchor = random.choice(malati)
-        positive = random.choice(malati)
-        negative = random.choice(sani)
-        # Evitiamo che ancora e positivo siano esattamente la stessa riga
+        anchor = pick_random_disease_id()
+        positive = pick_random_disease_id()
+        negative = random.choice(sani_ids)
+        
         while positive == anchor:
-            positive = random.choice(malati)
+            positive = pick_random_disease_id()
+            
         triplets.append({'anchor_id': anchor, 'positive_id': positive, 'negative_id': negative})
         
-    # 2. Generazione triplette con Ancora SANA (Healthy)
+    # --- METÀ 2: Ancora Sana (Positivo=Sano, Negativo=Malato) ---
     for _ in range(half_size):
-        anchor = random.choice(sani)
-        positive = random.choice(sani)
-        negative = random.choice(malati)
+        anchor = random.choice(sani_ids)
+        positive = random.choice(sani_ids)
+        negative = pick_random_disease_id()
+        
         while positive == anchor:
-            positive = random.choice(sani)
+            positive = random.choice(sani_ids)
+            
         triplets.append({'anchor_id': anchor, 'positive_id': positive, 'negative_id': negative})
         
-    # Mescoliamo le triplette per non darle alla rete tutte in ordine
     random.shuffle(triplets)
     return pd.DataFrame(triplets)
 
-# Generiamo un numero ragionevole di triplette per addestrare la rete
-# (Puoi aumentare questi numeri in base alla potenza del server/PC)
-print("Generazione 100.000 triplette di Train (50% Sani, 50% Malati)...")
-train_triplets = generate_balanced_triplets(df_train, 100000)
+
+print("\n--- FASE 3: GENERAZIONE TRIPLETTE BILANCIATE ---")
+print("Generazione 100.000 triplette di Train (Anti-Bias Cancro Gastrico)...")
+train_triplets = generate_smart_triplets(df_train, 100000)
 
 print("Generazione 20.000 triplette di Validation...")
-val_triplets = generate_balanced_triplets(df_val, 20000)
+val_triplets = generate_smart_triplets(df_val, 20000)
 
 print("Generazione 10.000 triplette di Test...")
-test_triplets = generate_balanced_triplets(df_test, 10000)
+test_triplets = generate_smart_triplets(df_test, 10000)
 
 print("\n--- FASE 4: SALVATAGGIO ---")
-# CREIAMO UN NUOVO FILE PER I DATI SCALATI INVECE DI SOVRASCRIVERE IL VECCHIO
-df_scaled = pd.concat([df_train, df_val, df_test])
-scaled_output_path = "data/processed/eccdna_metadata_CLEAN_SCALED.tsv"
-df_scaled.to_csv(scaled_output_path, sep="\t", index=False)
-print(f"Dataset scalato salvato in: {scaled_output_path}")
-
-# Salviamo i file delle triplette
 os.makedirs("data/triplets", exist_ok=True)
 train_triplets.to_csv("data/triplets/train_triplets.csv", index=False)
 val_triplets.to_csv("data/triplets/val_triplets.csv", index=False)
 test_triplets.to_csv("data/triplets/test_triplets.csv", index=False)
 
-print("✅ Data Preparation conclusa! Triplette salvate in 'data/triplets/'.")
+print("✅ Data Balancing concluso! Triplette perfette salvate in 'data/triplets/'.")
