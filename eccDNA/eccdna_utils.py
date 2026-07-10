@@ -1,8 +1,6 @@
 """Funzioni condivise dalla pipeline eccDNA.
 
-Prima di questo modulo, il parsing del FASTA era duplicato in
-kmer_extractor.py, kmer_4_extractor.py e debug_ids.py. Questo modulo e'
-l'unica fonte di verita' per: lettura streaming del FASTA, codifica one-hot
+lettura streaming del FASTA, codifica one-hot
 con augmentation circolare (per il classificatore CNN) e campionamento
 bilanciato sano/malato (usato da build_classification_dataset.py).
 
