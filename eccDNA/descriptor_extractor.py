@@ -1,14 +1,17 @@
 """Estrazione su larga scala dei descrittori biologici/statistici eccDNA.
 
-Stadio di PRODUZIONE della pipeline: calcola per ogni sequenza valida i
-descrittori definiti in eccdna_utils.compute_sequence_descriptors e li scrive
-su TSV, con lo stesso pattern RAM-safe/bufferizzato di kmer_extractor.py.
+Stadio di PRODUZIONE della pipeline: calcola per ogni sequenza valida i 15
+descrittori definiti in eccdna_utils.compute_sequence_descriptors (DESCRIPTOR_
+NAMES) e li scrive su TSV, con lettura FASTA streaming e scrittura
+bufferizzata RAM-safe (stesso pattern usato in tutta la pipeline dati).
 
-Da lanciare SOLO dopo aver stabilito, con descriptor_understanding.py, quali
-descrittori sono davvero informativi rispetto a disease_binary_label: questo
-script estrae su TUTTO il dataset (milioni di sequenze, FASTA da 6+ GB) e non
-serve a scoprire i descrittori fondamentali, solo a produrre il file finale
-per il training una volta che sappiamo quali tenere.
+Da lanciare SOLO dopo aver stabilito, con descriptor_understanding_by_disease.py,
+quali descrittori sono davvero informativi per i sottotipi di malattia che
+interessano - e dopo aver controllato i due confondenti noti (lunghezza della
+sequenza e metodo di sequenziamento, vedi quello script): questo script estrae
+su TUTTO il dataset (milioni di sequenze, FASTA da 6+ GB) e non serve a
+scoprire i descrittori fondamentali, solo a produrre il file finale per il
+training una volta che sappiamo quali tenere.
 
 NOTA: la lunghezza della sequenza NON viene inclusa tra i descrittori.
 E' stata deliberatamente esclusa da dataCleaning.py perche' identificata

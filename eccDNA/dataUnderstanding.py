@@ -17,6 +17,15 @@ proxy diretto della disease (alta feature importance) - per questo
 dataCleaning.py lo esclude di proposito dal dataset pulito. Lo script e'
 puramente di analisi/diagnostica: non produce file di output e non fa
 parte della catena dati -> modello.
+
+AGGIORNAMENTO (ricerca descrittori): un'analisi successiva, non ancora
+integrata in questo script, ha trovato un secondo confondente forte quanto
+'tissue': la colonna 'method' (protocollo di sequenziamento, es. Circle-seq
+vs ATAC-seq vs WGS) e' quasi perfettamente confusa con la disease per molti
+sottotipi (es. Fetal Growth Restriction ed Esophageal Cancer sono ~100% WGS,
+mentre il pool sano e' quasi 0% WGS). Va tenuto in considerazione insieme a
+'tissue' e 'length' in qualunque analisi di leakage futura - vedi il
+campionamento bilanciato per metodo in descriptor_understanding_by_disease.py.
 """
 
 import pandas as pd

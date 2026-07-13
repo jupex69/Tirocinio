@@ -1,9 +1,13 @@
-# eccDNA — classificazione sano / associato a malattia
+# eccDNA — ricerca sui descrittori biologici/statistici
 
-Pipeline per classificare frammenti di eccDNA (extrachromosomal circular DNA)
-come `healthy` o `disease_associated`, a partire dalla sola sequenza
-genomica. Ispirata a DeepCircle, ECCNET, eccDNAMamba, DeepECC e ScanTecc
-(vedi `../Paper/`).
+Prima di classificare le sequenze di eccDNA (extrachromosomal circular DNA)
+come sane o associate a malattia, il tutor ha chiesto di individuare quali
+descrittori biologici e statistici (composizione, entropia/disordine,
+complessità, ripetizioni) si possono estrarre dalla sequenza per allenare
+una rete neurale. Questo repo, nella sua forma attuale, è la pipeline che
+risponde a quella domanda: dai metadati grezzi alla scoperta, sottotipo di
+malattia per sottotipo, di quali descrittori portano segnale reale e non
+un artefatto dei dati.
 
 Per la descrizione del dataset grezzo (colonne, split, note sui valori
 mancanti) vedi `../README_disease_detection.md`, scritto dal tutor.
@@ -15,9 +19,10 @@ conda activate ecc_Dna_hotspot
 pip install -r requirements.txt
 ```
 
-Nessuna GPU richiesta (`torch` è la build CPU): tutto lo script di training
-gira su CPU in tempi ragionevoli grazie a un dataset campionato e bilanciato
-(non l'intero dataset da 3,7M sequenze).
+`requirements.txt` contiene solo `pandas`, `numpy`, `scikit-learn`: tutto
+cio' che serve alla pipeline attiva. Per rilanciare gli script archiviati in
+`vecchi/` (vedi sezione 5) serve installare a parte anche `torch`,
+`matplotlib` e `tqdm`.
 
 ## 2. Dati necessari (non su git)
 
@@ -29,59 +34,73 @@ data/processed/eccdna_disease_detection_metadata.tsv
 data/processed/eccdna_disease_detection.body.fa
 ```
 
-Tutto il resto (`eccdna_metadata_CLEAN.tsv`, i file dei k-meri, i dataset
-di classificazione, i modelli allenati) viene generato dagli script sotto.
+`eccdna_metadata_CLEAN.tsv` ed `eccdna_descriptor_features.tsv` vengono
+generati dagli script sotto.
 
 ## 3. Pipeline, in ordine
 
 | # | Comando | Cosa produce |
 |---|---|---|
-| 1 | `python dataUnderstanding.py` | Solo diagnostica: EDA + rilevamento data leakage (facoltativo, non genera file) |
+| 1 | `python dataUnderstanding.py` | Solo diagnostica: EDA + rilevamento data leakage sui metadati grezzi (non genera file) |
 | 2 | `python dataCleaning.py` | `data/processed/eccdna_metadata_CLEAN.tsv` (metadati puliti, senza le colonne che causano leakage) |
-| 3 | `python kmer_extractor.py --k 3` | `data/processed/eccdna_kmer_3_features.tsv` (frequenze di k-meri, usate solo dalla baseline) |
-| 4 | `python build_classification_dataset.py` | `data/classification/{train,val,test}_ids.csv` (id bilanciati sano/malato, uniformi tra i tipi di malattia) |
-| 5a | `python train_classifier.py` | CNN sulla sequenza one-hot con augmentation circolare → `data/models/` (checkpoint, metriche, grafico) |
-| 5b | `python baseline_kmer_model.py` | Logistic Regression + Random Forest sui k-meri → `data/models_baseline/metrics.json` |
+| 3 | `python descriptor_understanding_by_disease.py --diseases "..."` | Solo diagnostica: per i sottotipi indicati, calcola i 15 descrittori su un campione e verifica quali sono davvero informativi, controllando i confondenti lunghezza e metodo di sequenziamento (non genera file) |
+| 4 | `python descriptor_extractor.py` | `data/processed/eccdna_descriptor_features.tsv` (i 15 descrittori estratti su tutto il dataset — lanciare solo dopo aver deciso quali descrittori tenere con il passo 3) |
 
-Il passo 3 può essere rifatto anche con `--k 4` (256 feature invece di 64);
-`baseline_kmer_model.py` accetta `--kmer-features-path` per usare quel file
-al posto del default k=3.
+Il passo 3 è quello su cui si è concentrata la ricerca finora: senza
+argomenti analizza tutti i sottotipi con almeno `--min-per-class` sequenze;
+con `--diseases "MalattiaA,MalattiaB"` fa un'analisi di dettaglio (importanza
+RandomForest + AUC univariata per ciascun descrittore) solo sui sottotipi
+indicati.
 
-Gli step 5a e 5b sono indipendenti tra loro e possono girare in qualunque
-ordine (o in parallelo, se la macchina ha abbastanza core).
+## 4. Cosa abbiamo scoperto finora
 
-## 4. Via secondaria (non attiva): triplet loss
+**15 descrittori**, definiti in `eccdna_utils.compute_sequence_descriptors`,
+divisi in 4 famiglie:
+- **Composizione**: `gc_skew`, `at_skew`, `cpg_oe`, `purine_pyrimidine_ratio`, `dinuc_signature_dist`
+- **Disordine statistico**: `entropy_mono/di/tri`, `cond_entropy_1/2`, `lz_complexity`
+- **Eterogeneità interna** (sequenze "a mosaico"): `gc_window_std`, `entropy_tri_window_std`
+- **Ripetizioni**: `tandem_repeat_fraction`, `palindrome_density`
 
-`triplet_generator.py` genera triplette anchor/positive/negative bilanciate per un
-eventuale futuro approccio a embedding con triplet loss / rete siamese.
-Non è la via principale  e non è
-consumato da nessun modello attuale: resta nel repo come asset già generato
-(`data/triplets/*.csv`, già committati) per un possibile sviluppo futuro.
+**Due confondenti nascosti nei metadati**, entrambi da controllare prima di
+fidarsi di un qualunque segnale sano/malato:
+- `length` (già noto, per questo escluso da `dataCleaning.py`)
+- `method`/`source_db`/`library_type` (il protocollo di sequenziamento,
+  scoperto in questa ricerca — es. alcune malattie sono ~100% WGS mentre il
+  pool sano è quasi 0% WGS: senza controllo, un modello imparerebbe il
+  protocollo, non la malattia)
 
-## 5. File principali
+`descriptor_understanding_by_disease.py` costruisce il pool sano su misura
+per ciascun sottotipo, bilanciato per metodo di sequenziamento (non un
+pool condiviso campionato a caso), e verifica comunque a valle con un AUC
+"length-matched" e "method-matched".
+
+**Malattie con segnale confermato robusto** (sopravvive ai controlli su
+lunghezza e metodo): systemic lupus erythematosus, chronic kidney disease,
+gastric/colorectal/breast cancer, primary pulmonary hypertension, cataract,
+glioblastoma cancer, dilated cardiomyopathy. Altre (es. fetal growth
+restriction, esophageal cancer) risultano al momento indeterminabili: il
+sottotipo usa un metodo di sequenziamento quasi assente nel pool sano
+dell'intero dataset (es. solo 2 sequenze sane con WGS su 445.138 sane
+totali) — non un limite dello script, un limite dei dati sorgente.
+
+## 5. Script archiviati (`vecchi/`, fuori da git)
+
+La cartella `vecchi/` (accanto a questo repo, ignorata da git) contiene la
+pipeline di classificazione esplorata prima di questa ricerca sui
+descrittori — non più collegata al lavoro attuale, tenuta solo per
+riferimento: `model.py` (CNN), `train_classifier.py`,
+`build_classification_dataset.py`, `baseline_kmer_model.py`,
+`kmer_extractor.py`, `triplet_generator.py`, `descriptor_understanding.py`
+(la prima versione, aggregata su tutte le malattie insieme — superata da
+`descriptor_understanding_by_disease.py` perché l'aggregazione annacqua il
+segnale specifico di ogni sottotipo).
+
+## 6. File principali
 
 | File | Ruolo |
 |---|---|
 | `dataUnderstanding.py` | EDA + rilevamento data leakage sui metadati grezzi |
 | `dataCleaning.py` | Pulizia metadati grezzi → `eccdna_metadata_CLEAN.tsv` |
-| `kmer_extractor.py` | Estrazione frequenze di k-meri (`--k 3` o `--k 4`) |
-| `eccdna_utils.py` | Funzioni condivise: parsing FASTA, codifica one-hot circolare, campionamento bilanciato |
-| `build_classification_dataset.py` | Costruisce il dataset bilanciato train/val/test per il classificatore diretto |
-| `model.py` | Architettura della CNN 1D (`EccDNACNN`) |
-| `train_classifier.py` | Training + valutazione della CNN |
-| `baseline_kmer_model.py` | Baseline Logistic Regression / Random Forest sui k-meri |
-| `triplet_generator.py` | Via secondaria (triplet loss), non attiva |
-
-## 6. Risultati (ultimo run)
-
-Dataset bilanciato: 30.000 train / 6.000 val / 6.000 test, 50/50 sano/malato,
-66 tipi di malattia diversi mescolati (non un singolo tipo di cancro, a
-differenza dei paper di riferimento).
-
-| Modello | Accuracy | Precision | Recall | F1 | ROC-AUC |
-|---|---|---|---|---|---|
-| CNN (sequenza, `data/models/metrics.json`) | 0.546 | 0.531 | 0.793 | 0.636 | 0.572 |
-| Logistic Regression (k-meri) | 0.542 | 0.536 | 0.627 | 0.578 | 0.562 |
-| Random Forest (k-meri, `data/models_baseline/metrics.json`) | 0.662 | 0.653 | 0.692 | 0.672 | 0.712 |
-
-Il Random Forest sui k-meri è al momento il modello migliore.
+| `eccdna_utils.py` | Funzioni condivise: parsing FASTA, calcolo dei 15 descrittori |
+| `descriptor_understanding_by_disease.py` | Scoperta dei descrittori per sottotipo, con controllo dei confondenti lunghezza/metodo |
+| `descriptor_extractor.py` | Estrazione dei descrittori su tutto il dataset (stadio di produzione) |

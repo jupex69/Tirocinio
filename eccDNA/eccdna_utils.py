@@ -1,14 +1,22 @@
 """Funzioni condivise dalla pipeline eccDNA.
 
-lettura streaming del FASTA, codifica one-hot
-con augmentation circolare (per il classificatore CNN), campionamento
-bilanciato sano/malato (usato da build_classification_dataset.py) e calcolo
-dei descrittori biologici/statistici di sequenza (usato da
-descriptor_extractor.py e descriptor_understanding.py).
+Attivamente usate oggi (ricerca sui descrittori biologici/statistici):
+- read_fasta_stream / load_sequences: lettura streaming del FASTA, RAM-safe
+- compute_sequence_descriptors e le funzioni di supporto (entropia,
+  complessita' di Lempel-Ziv, skew, firma dinucleotidica, ripetizioni...):
+  usate da descriptor_extractor.py e descriptor_understanding_by_disease.py
+- check_fasta_metadata_alignment: controllo di coerenza id TSV <-> FASTA
 
-NOTA: triplet_generator.py NON usa queste funzioni di proposito, per non
-cambiare la logica random che ha generato i triplet CSV gia' committati in
-data/triplets/.
+Funzioni storiche (usate solo dagli script archiviati in vecchi/, tenute
+qui per riferimento/compatibilita' ma non toccate dalla pipeline attuale):
+- one_hot_encode_circular: codifica per il classificatore CNN (model.py,
+  train_classifier.py)
+- sample_balanced_ids: campionamento bilanciato sano/malato usato da
+  build_classification_dataset.py
+
+NOTA: triplet_generator.py (anch'esso in vecchi/) non usava queste funzioni
+di proposito, per non cambiare la logica random che aveva generato i
+triplet CSV.
 """
 
 import math
