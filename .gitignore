@@ -18,3 +18,7 @@ eccDNA/CLAUDE.md
 
 # PDF dei paper di riferimento: solo materiale bibliografico, non codice
 *.pdf
+
+# script superati/non piu' collegati alla ricerca sui descrittori, tenuti in locale
+vecchi/
+descrittori.txt
