@@ -3,8 +3,8 @@
 Attivamente usate oggi (ricerca sui descrittori biologici/statistici):
 - read_fasta_stream / load_sequences: lettura streaming del FASTA, RAM-safe
 - compute_sequence_descriptors e le funzioni di supporto (entropia,
-  complessita' di Lempel-Ziv, skew, firma dinucleotidica, ripetizioni...):
-  usate da descriptor_extractor.py e descriptor_understanding_by_disease.py
+  complessita' di Lempel-Ziv, eterogeneita' interna a finestre): usate da
+  descriptor_extractor.py e descriptor_understanding_by_disease.py
 - check_fasta_metadata_alignment: controllo di coerenza id TSV <-> FASTA
 
 Funzioni storiche (usate solo dagli script archiviati in vecchi/, tenute
@@ -29,19 +29,19 @@ import pandas as pd
 
 BASES = "ACGT"
 BASE_TO_IDX = {b: i for i, b in enumerate(BASES)}
+# Ridotto da 15 a questi 6 dopo l'analisi per sottotipo in
+# descriptor_understanding_by_disease.py: sono la famiglia entropia/complessita'
+# (entropy_tri, cond_entropy_1, cond_entropy_2, lz_complexity) piu' quella di
+# eterogeneita' interna (gc_window_std, entropy_tri_window_std) - insieme
+# classificano bene 12 delle 17 malattie con segnale robusto confermato,
+# contro un contributo trascurabile delle altre 9 (composizione/ripetizioni).
 DESCRIPTOR_NAMES = [
-    "gc_skew", "at_skew", "cpg_oe", "purine_pyrimidine_ratio", "dinuc_signature_dist",
-    "entropy_mono", "entropy_di", "entropy_tri", "cond_entropy_1", "cond_entropy_2",
+    "entropy_tri", "cond_entropy_1", "cond_entropy_2",
     "lz_complexity", "gc_window_std", "entropy_tri_window_std",
-    "tandem_repeat_fraction", "palindrome_density",
 ]
 LZ_COMPLEXITY_MAX_LENGTH = 20000  # oltre questa soglia lz76_complexity (O(n^2) nel caso peggiore) viene saltata
 WINDOWED_HETEROGENEITY_WINDOW = 150  # dimensione delle finestre non sovrapposte per gc/entropy_tri_window_std
 WINDOWED_HETEROGENEITY_MIN_WINDOWS = 3  # sotto questa soglia la sequenza e' troppo corta per misurare eterogeneita'
-TANDEM_REPEAT_MAX_UNIT = 6  # lunghezza massima dell'unita' ripetuta cercata (1..6 bp)
-TANDEM_REPEAT_MIN_COPIES = 3  # minimo di copie consecutive per contare come ripetizione
-PALINDROME_WINDOW = 10  # lunghezza delle finestre controllate per palindrome_density
-COMPLEMENT = {"A": "T", "T": "A", "C": "G", "G": "C"}
 
 
 def extract_fasta_id(header_line):
@@ -101,55 +101,6 @@ def _entropy_bits_from_counts(counts, total):
         p = count / total
         entropia -= p * math.log2(p)
     return entropia
-
-
-def gc_at_skew(base_counts):
-    """Skew di composizione (G-C)/(G+C) e (A-T)/(A+T) da un Counter di basi."""
-    g, c = base_counts.get("G", 0), base_counts.get("C", 0)
-    a, t = base_counts.get("A", 0), base_counts.get("T", 0)
-    gc_skew = (g - c) / (g + c) if (g + c) > 0 else 0.0
-    at_skew = (a - t) / (a + t) if (a + t) > 0 else 0.0
-    return gc_skew, at_skew
-
-
-def purine_pyrimidine_ratio(base_counts):
-    """Rapporto purine/pirimidine (A+G)/(C+T): asimmetria di composizione
-    complementare a gc_skew/at_skew (assi diversi di skew)."""
-    purine = base_counts.get("A", 0) + base_counts.get("G", 0)
-    pirimidine = base_counts.get("C", 0) + base_counts.get("T", 0)
-    return purine / pirimidine if pirimidine > 0 else 0.0
-
-
-def cpg_observed_over_expected(sequence, base_counts):
-    """Rapporto CpG osservato/atteso: proxy di metilazione/pressione selettiva."""
-    lunghezza = len(sequence)
-    freq_c = base_counts.get("C", 0) / lunghezza
-    freq_g = base_counts.get("G", 0) / lunghezza
-    if freq_c == 0 or freq_g == 0:
-        return 0.0
-
-    n_cg = sum(1 for i in range(lunghezza - 1) if sequence[i:i + 2] == "CG")
-    freq_cg_osservata = n_cg / (lunghezza - 1)
-    return freq_cg_osservata / (freq_c * freq_g)
-
-
-def dinucleotide_signature_distance(base_counts, di_counts, di_total, lunghezza):
-    """'Firma genomica' di Karlin: media di |rho_xy - 1| sui 16 dinucleotidi,
-    dove rho_xy = f(xy) / (f(x)*f(y)). Generalizza cpg_oe a tutte le coppie
-    di basi: quantifica quanto la composizione a coppie si discosta da
-    quella attesa per indipendenza (bias globale, non solo CpG).
-    """
-    freq_base = {b: base_counts.get(b, 0) / lunghezza for b in BASES}
-    scarti = []
-    for x in BASES:
-        for y in BASES:
-            fx, fy = freq_base[x], freq_base[y]
-            if fx == 0 or fy == 0:
-                continue
-            f_xy = di_counts.get(x + y, 0) / di_total
-            rho = f_xy / (fx * fy)
-            scarti.append(abs(rho - 1))
-    return sum(scarti) / len(scarti) if scarti else 0.0
 
 
 def lz76_complexity(sequence):
@@ -242,71 +193,8 @@ def windowed_heterogeneity(sequence, window_size=WINDOWED_HETEROGENEITY_WINDOW,
     return gc_std, entropy_std
 
 
-def tandem_repeat_fraction(sequence, max_unit=TANDEM_REPEAT_MAX_UNIT, min_copies=TANDEM_REPEAT_MIN_COPIES):
-    """Frazione della sequenza coperta da ripetizioni in tandem semplici
-    (unita' di 1..max_unit basi, ripetuta almeno min_copies volte di fila).
-
-    La formazione di eccDNA e' spesso mediata da ripetizioni genomiche
-    (dirette o invertite): questo descrittore cattura un aspetto strutturale
-    diverso da composizione/entropia/complessita' - non "quanto e' prevedibile
-    la sequenza" ma "quanto e' letteralmente occupata da un motivo ripetuto".
-    Scansione greedy: a ogni posizione si cerca la ripetizione piu' lunga
-    (su tutte le lunghezze di unita' provate), poi si salta oltre la regione
-    coperta. O(n * max_unit).
-    """
-    n = len(sequence)
-    if n == 0:
-        return 0.0
-    covered = 0
-    i = 0
-    while i < n:
-        miglior_lunghezza = 0
-        for unit in range(1, max_unit + 1):
-            if i + unit * min_copies > n:
-                continue
-            u = sequence[i:i + unit]
-            copie = 1
-            j = i + unit
-            while j + unit <= n and sequence[j:j + unit] == u:
-                copie += 1
-                j += unit
-            if copie >= min_copies:
-                lunghezza = copie * unit
-                if lunghezza > miglior_lunghezza:
-                    miglior_lunghezza = lunghezza
-        if miglior_lunghezza > 0:
-            covered += miglior_lunghezza
-            i += miglior_lunghezza
-        else:
-            i += 1
-    return covered / n
-
-
-def palindrome_density(sequence, window=PALINDROME_WINDOW):
-    """Densita' di finestre palindromiche (reverse-complement) di lunghezza
-    fissa lungo la sequenza: quante finestre di 'window' basi sono uguali al
-    proprio reverse-complement, sul totale delle finestre possibili.
-
-    I palindromi di sequenza (non il senso letterario) favoriscono strutture
-    a forcina/cruciformi, associate in letteratura a instabilita' genomica -
-    un meccanismo strutturale diverso da quelli gia' coperti dagli altri
-    descrittori. O(n * window).
-    """
-    n = len(sequence)
-    if n < window:
-        return 0.0
-    totale_finestre = n - window + 1
-    conteggio = 0
-    for i in range(totale_finestre):
-        w = sequence[i:i + window]
-        revcomp = "".join(COMPLEMENT.get(b, "?") for b in reversed(w))
-        if w == revcomp:
-            conteggio += 1
-    return conteggio / totale_finestre
-
-
 def compute_sequence_descriptors(sequence):
-    """Calcola tutti i descrittori biologici/statistici per una sequenza.
+    """Calcola i 6 descrittori biologici/statistici per una sequenza.
 
     Ritorna un dict con le chiavi in DESCRIPTOR_NAMES. La sequenza deve
     essere gia' filtrata a monte (niente 'N', lunghezza minima >= 3): qui
@@ -326,25 +214,15 @@ def compute_sequence_descriptors(sequence):
     h2 = _entropy_bits_from_counts(di_counts, di_total)
     h3 = _entropy_bits_from_counts(tri_counts, tri_total)
 
-    gc_skew, at_skew = gc_at_skew(base_counts)
     gc_window_std, entropy_tri_window_std = windowed_heterogeneity(sequence)
 
     return {
-        "gc_skew": gc_skew,
-        "at_skew": at_skew,
-        "cpg_oe": cpg_observed_over_expected(sequence, base_counts),
-        "purine_pyrimidine_ratio": purine_pyrimidine_ratio(base_counts),
-        "dinuc_signature_dist": dinucleotide_signature_distance(base_counts, di_counts, di_total, lunghezza),
-        "entropy_mono": h1 / 2,
-        "entropy_di": h2 / 4,
         "entropy_tri": h3 / 6,
         "cond_entropy_1": (h2 - h1) / 2,
         "cond_entropy_2": (h3 - h2) / 2,
         "lz_complexity": lz_complexity_normalized(sequence),
         "gc_window_std": gc_window_std,
         "entropy_tri_window_std": entropy_tri_window_std,
-        "tandem_repeat_fraction": tandem_repeat_fraction(sequence),
-        "palindrome_density": palindrome_density(sequence),
     }
 
 

@@ -54,12 +54,12 @@ indicati.
 
 ## 4. Cosa abbiamo scoperto finora
 
-**15 descrittori**, definiti in `eccdna_utils.compute_sequence_descriptors`,
-divisi in 4 famiglie:
-- **Composizione**: `gc_skew`, `at_skew`, `cpg_oe`, `purine_pyrimidine_ratio`, `dinuc_signature_dist`
-- **Disordine statistico**: `entropy_mono/di/tri`, `cond_entropy_1/2`, `lz_complexity`
+**6 descrittori**, definiti in `eccdna_utils.compute_sequence_descriptors`
+(ridotti da un set iniziale di 15 dopo l'analisi per sottotipo — le altre 9,
+di composizione e ripetizioni, davano un contributo trascurabile), divisi
+in 2 famiglie:
+- **Disordine/complessità**: `entropy_tri`, `cond_entropy_1`, `cond_entropy_2`, `lz_complexity`
 - **Eterogeneità interna** (sequenze "a mosaico"): `gc_window_std`, `entropy_tri_window_std`
-- **Ripetizioni**: `tandem_repeat_fraction`, `palindrome_density`
 
 **Due confondenti nascosti nei metadati**, entrambi da controllare prima di
 fidarsi di un qualunque segnale sano/malato:
@@ -67,18 +67,30 @@ fidarsi di un qualunque segnale sano/malato:
 - `method`/`source_db`/`library_type` (il protocollo di sequenziamento,
   scoperto in questa ricerca — es. alcune malattie sono ~100% WGS mentre il
   pool sano è quasi 0% WGS: senza controllo, un modello imparerebbe il
-  protocollo, non la malattia)
+  protocollo, non la malattia). Confermato anche da `dataUnderstanding.py`:
+  nel modello spia RandomForest, `method` è il secondo confondente più forte
+  in assoluto (14.9% di importanza, dietro solo `tissue` al 61.3%).
 
 `descriptor_understanding_by_disease.py` costruisce il pool sano su misura
 per ciascun sottotipo, bilanciato per metodo di sequenziamento (non un
 pool condiviso campionato a caso), e verifica comunque a valle con un AUC
-"length-matched" e "method-matched".
+"length-matched", "method-matched" e "method+length-matched" (il controllo
+più severo: bilancia entrambi i confondenti insieme).
 
-**Malattie con segnale confermato robusto** (sopravvive ai controlli su
-lunghezza e metodo): systemic lupus erythematosus, chronic kidney disease,
-gastric/colorectal/breast cancer, primary pulmonary hypertension, cataract,
-glioblastoma cancer, dilated cardiomyopathy. Altre (es. fetal growth
-restriction, esophageal cancer) risultano al momento indeterminabili: il
+**Il quadro completo, sulle 67 malattie del dataset grezzo**: 41 hanno
+abbastanza sequenze malate da testare, 31 hanno anche un sano compatibile
+per metodo di sequenziamento, e di queste **17 mostrano un segnale
+biologico robusto** che sopravvive al controllo combinato lunghezza+metodo
+(le altre 14 sembravano promettenti grezze ma erano quasi interamente
+spiegate da length/method — es. Melanoma: AUC 0.83 grezzo → 0.57 dopo il
+controllo doppio, un artefatto). Delle 17 robuste, i 6 descrittori scelti
+ne classificano bene **12** (es. gastric/colorectal cancer, chronic kidney
+disease, primary pulmonary hypertension, dilated cardiomyopathy, systemic
+lupus erythematosus), 2 in modo più debole (colorectal adenoma, stomach) e
+3 restano poco solide per limiti dei dati sorgente (campione piccolo, o
+confronto contro linee cellulari isolate/tessuto sano non pertinente
+all'organo malato, es. hypopharynx cancer). Le rimanenti malattie (es.
+fetal growth restriction, esophageal cancer) risultano indeterminabili: il
 sottotipo usa un metodo di sequenziamento quasi assente nel pool sano
 dell'intero dataset (es. solo 2 sequenze sane con WGS su 445.138 sane
 totali) — non un limite dello script, un limite dei dati sorgente.

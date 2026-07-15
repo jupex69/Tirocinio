@@ -11,14 +11,20 @@ restare RAM-safe su un file di ~1,3GB/3,7M righe; ogni blocco viene
 pulito e accodato subito su disco (append) invece di accumulare tutto
 in memoria.
 
-Altre info: le colonne tissue, cell_line, length e sample sono escluse
-DI PROPOSITO, non per dimenticanza - dataUnderstanding.py ha mostrato
-che tissue e' quasi un proxy diretto della disease (data leakage), si
-veda il "modello spia" RandomForest in quello script. La colonna
-disease_class e' una versione normalizzata (minuscolo, snake_case) di
-disease, pensata per un futuro training multiclasse; non unisce
-categorie diverse (es. "Stomach" e "Gastric cancer" restano separate)
-perche' non e' garantito che siano biologicamente equivalenti.
+Altre info: le colonne tissue, cell_line, length, sample, method,
+source_db e library_type sono escluse DI PROPOSITO, non per
+dimenticanza - dataUnderstanding.py ha mostrato che tissue e' quasi un
+proxy diretto della disease (data leakage), e che method/source_db lo
+sono quasi altrettanto (si veda il "modello spia" RandomForest in quello
+script). Chi ha bisogno di method/source_db per bilanciare un campione
+per sottotipo (non per usarli come feature di training) deve leggerli
+a parte dal file grezzo, come fa load_method_series_full() in
+descriptor_understanding_by_disease.py - qui restano esclusi apposta,
+per evitare che finiscano per sbaglio tra le feature di un classificatore.
+La colonna disease_class e' una versione normalizzata (minuscolo,
+snake_case) di disease, pensata per un futuro training multiclasse; non
+unisce categorie diverse (es. "Stomach" e "Gastric cancer" restano
+separate) perche' non e' garantito che siano biologicamente equivalenti.
 """
 
 import pandas as pd

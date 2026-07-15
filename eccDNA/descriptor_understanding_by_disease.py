@@ -50,6 +50,16 @@ comunque calcolato un AUC "method-matched" a valle (stessa logica del
 length-matched ma per categoria di metodo) come verifica indipendente che
 il ricampionamento abbia funzionato.
 
+CONTROLLO DOPPIO - METODO + LUNGHEZZA INSIEME: length-matched e
+method-matched, presi separatamente, possono restare alti anche quando il
+vero motore e' la lunghezza *all'interno* di uno stesso metodo (caso reale
+trovato per Melanoma: method-matched alto, ma lunghezza molto diversa tra
+sano e malato anche dentro lo stesso metodo ATAC-seq). L'AUC
+"method+length-matched" bilancia sano/malato per la combinazione
+(metodo, bin di lunghezza calcolato separatamente per ciascun metodo): e'
+il controllo piu' severo, risponde a "il segnale sopravvive controllando
+ENTRAMBI i confondenti insieme, non uno alla volta?".
+
 MODALITA' DEEP-DIVE (--diseases): quando si passa un elenco esplicito di
 sottotipi, lo script stampa in piu' per ciascuno la classifica di importanza
 RandomForest e l'AUC univariata per descrittore (grezza, length-matched,
@@ -75,6 +85,7 @@ from eccdna_utils import DESCRIPTOR_NAMES, compute_sequence_descriptors, read_fa
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 LENGTH_MATCH_BINS = 10
+DOUBLE_MATCH_LENGTH_BINS = 5  # meno bin dello standalone: qui la lunghezza e' gia' stratificata anche per metodo
 MATCH_MIN_TOTAL = 40
 MIN_SANO_PER_FIT = 20  # sotto questa soglia il campione sano e' troppo piccolo per un RF/AUC attendibile
 
@@ -188,6 +199,45 @@ def method_matched_auc(desc_sani, desc_malati, method_sani, method_malati, seed)
     """Bilancia sano/malato per CATEGORIA di metodo, come ulteriore verifica indipendente
     che il campionamento su misura (FASE 2) abbia gia' risolto il confondente."""
     return _matched_auc_by_groups(desc_sani, desc_malati, method_sani, method_malati, seed)
+
+
+def method_and_length_matched_auc(desc_sani, desc_malati, method_sani, method_malati,
+                                   length_sani, length_malati, seed, n_bins=DOUBLE_MATCH_LENGTH_BINS):
+    """Controllo DOPPIO: bilancia sano/malato per la combinazione (metodo, bin di
+    lunghezza), non uno alla volta. Length-matched e method-matched, presi
+    separatamente, possono restare alti anche quando il segnale e' in realta'
+    spiegato dalla lunghezza *all'interno* di uno stesso metodo (es. melanoma:
+    method-matched alto ma lunghezza molto diversa tra sano e malato anche
+    dentro lo stesso metodo ATAC-seq). Questo test risponde alla domanda:
+    il segnale sopravvive controllando ENTRAMBI i confondenti insieme?
+
+    I quantili di lunghezza vengono calcolati SEPARATAMENTE per ciascun
+    metodo (non su scala globale), cosi' un metodo con sequenze tipicamente
+    piu' corte/lunghe di un altro non finisce tutto nello stesso bin globale.
+    """
+    gruppi_sani = pd.Series(index=method_sani.index, dtype=object)
+    gruppi_malati = pd.Series(index=method_malati.index, dtype=object)
+
+    metodi_comuni = set(method_sani.unique()) | set(method_malati.unique())
+    for metodo in metodi_comuni:
+        idx_s = method_sani[method_sani == metodo].index
+        idx_m = method_malati[method_malati == metodo].index
+        lunghezze_metodo = pd.concat([length_sani.loc[idx_s], length_malati.loc[idx_m]])
+
+        n_bins_effettivi = min(n_bins, lunghezze_metodo.nunique())
+        if n_bins_effettivi < 2:
+            etichette = pd.Series(f"{metodo}__bin0", index=lunghezze_metodo.index)
+        else:
+            try:
+                bins = pd.qcut(lunghezze_metodo, q=n_bins_effettivi, duplicates="drop")
+                etichette = metodo + "__" + bins.astype(str)
+            except ValueError:
+                etichette = pd.Series(f"{metodo}__bin0", index=lunghezze_metodo.index)
+
+        gruppi_sani.loc[idx_s] = etichette.reindex(idx_s)
+        gruppi_malati.loc[idx_m] = etichette.reindex(idx_m)
+
+    return _matched_auc_by_groups(desc_sani, desc_malati, gruppi_sani, gruppi_malati, seed)
 
 
 def load_method_series_full(raw_path, chunk_size=250000):
@@ -370,7 +420,13 @@ def main():
         )
         auc_method_str = f"{auc_method:.3f} (n={n_method})" if auc_method is not None else f"N/A (n={n_method}, sovrapposizione insufficiente)"
 
-        print(f"    ROC-AUC grezzo (test 30%): {auc:.3f}   |   length-matched: {auc_matched_str}   |   method-matched: {auc_method_str}")
+        auc_double, n_double, X_double, y_double, rf_double = method_and_length_matched_auc(
+            X_sani, X_malati, method_sani, method_malati, len_sani, len_malati, seed
+        )
+        auc_double_str = f"{auc_double:.3f} (n={n_double})" if auc_double is not None else f"N/A (n={n_double}, sovrapposizione insufficiente)"
+
+        print(f"    ROC-AUC grezzo (test 30%): {auc:.3f}   |   length-matched: {auc_matched_str}   |   "
+              f"method-matched: {auc_method_str}   |   method+length-matched: {auc_double_str}")
 
         if detailed:
             print_importance_and_univariate("GREZZO", rf, X, y)
@@ -382,10 +438,15 @@ def main():
                 print_importance_and_univariate("METHOD-MATCHED", rf_method, X_method, y_method)
             else:
                 print("    [METHOD-MATCHED] non disponibile (sovrapposizione di metodo insufficiente).")
+            if rf_double is not None:
+                print_importance_and_univariate("METHOD+LENGTH-MATCHED", rf_double, X_double, y_double)
+            else:
+                print("    [METHOD+LENGTH-MATCHED] non disponibile (sovrapposizione insufficiente).")
 
         risultati.append({
             "disease": subtype, "n_malati": len(X_malati), "n_sani": len(X_sani),
             "auc_grezzo": auc, "auc_length_matched": auc_matched, "auc_method_matched": auc_method,
+            "auc_method_length_matched": auc_double,
             "method_overlap_pct": overlap_malato * 100,
             "length_diff": length_diff, "corr_len_entropy_tri": corr_len_entropy_tri,
         })
@@ -396,8 +457,10 @@ def main():
         print(df_riepilogo.to_string(index=False))
         print("\nCon il campionamento su misura, 'auc_grezzo' e' gia' costruito per essere il piu' possibile "
               "bilanciato per metodo di sequenziamento (non solo per lunghezza). 'auc_length_matched' e "
-              "'auc_method_matched' restano comunque utili come verifica indipendente a valle: se restano "
-              "vicini a 'auc_grezzo', il segnale e' verosimilmente reale.")
+              "'auc_method_matched' restano comunque utili come verifica indipendente a valle. "
+              "'auc_method_length_matched' e' il controllo piu' severo: bilancia ENTRAMBI i confondenti insieme "
+              "(per la stessa combinazione metodo+bin di lunghezza) - se resta alto anche qui, il segnale non e' "
+              "spiegabile ne' dal metodo ne' dalla lunghezza, nemmeno combinati.")
     else:
         print("Nessun sottotipo con dati sufficienti.")
 
