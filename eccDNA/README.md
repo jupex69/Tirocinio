@@ -43,8 +43,8 @@ generati dagli script sotto.
 |---|---|---|
 | 1 | `python dataUnderstanding.py` | Solo diagnostica: EDA + rilevamento data leakage sui metadati grezzi (non genera file) |
 | 2 | `python dataCleaning.py` | `data/processed/eccdna_metadata_CLEAN.tsv` (metadati puliti, senza le colonne che causano leakage) |
-| 3 | `python descriptor_understanding_by_disease.py --diseases "..."` | Solo diagnostica: per i sottotipi indicati, calcola i 15 descrittori su un campione e verifica quali sono davvero informativi, controllando i confondenti lunghezza e metodo di sequenziamento (non genera file) |
-| 4 | `python descriptor_extractor.py` | `data/processed/eccdna_descriptor_features.tsv` (i 15 descrittori estratti su tutto il dataset — lanciare solo dopo aver deciso quali descrittori tenere con il passo 3) |
+| 3 | `python descriptor_understanding_by_disease.py --diseases "..."` | Solo diagnostica: per i sottotipi indicati, calcola i descrittori su un campione e verifica quali sono davvero informativi, controllando i confondenti lunghezza e metodo di sequenziamento (non genera file) |
+| 4 | `python descriptor_extractor.py` | `data/processed/eccdna_descriptor_features.tsv` (i 6 descrittori estratti solo per le malattie con segnale confermato, non su tutto il dataset — vedi sezione 4) + `eccdna_disease_pairing.tsv` (abbinamento malattia↔id, necessario perché il pool sano è condiviso tra malattie) |
 
 Il passo 3 è quello su cui si è concentrata la ricerca finora: senza
 argomenti analizza tutti i sottotipi con almeno `--min-per-class` sequenze;
@@ -113,6 +113,38 @@ segnale specifico di ogni sottotipo).
 |---|---|
 | `dataUnderstanding.py` | EDA + rilevamento data leakage sui metadati grezzi |
 | `dataCleaning.py` | Pulizia metadati grezzi → `eccdna_metadata_CLEAN.tsv` |
-| `eccdna_utils.py` | Funzioni condivise: parsing FASTA, calcolo dei 15 descrittori |
+| `eccdna_utils.py` | Funzioni condivise: parsing FASTA, calcolo dei 6 descrittori |
 | `descriptor_understanding_by_disease.py` | Scoperta dei descrittori per sottotipo, con controllo dei confondenti lunghezza/metodo |
-| `descriptor_extractor.py` | Estrazione dei descrittori su tutto il dataset (stadio di produzione) |
+| `descriptor_extractor.py` | Estrazione dei descrittori per le malattie con segnale confermato (stadio di produzione) |
+
+## 7. Bibliografia
+
+Paper di riferimento consultati per la scelta dei descrittori e per il
+contesto sull'eccDNA (i PDF restano solo in locale in `Paper/`, non su git —
+vedi `.gitignore`):
+
+- Wang C. et al., "DeepECC: a deep learning framework for genome-wide
+  identification and analysis of human cancer eccDNAs", *Nucleic Acids
+  Research*, 2026. DOI: [10.1093/nar/gkag198](https://doi.org/10.1093/nar/gkag198).
+  Fonte della convenzione "basi non standard -> colonna zero" usata in
+  `eccdna_utils.one_hot_encode_circular`.
+- Chang K.-L. et al., "Short human eccDNAs are predictable from sequences"
+  (DeepCircle), *Briefings in Bioinformatics* 24(3), 2023.
+  DOI: [10.1093/bib/bbad147](https://doi.org/10.1093/bib/bbad147). Prima
+  evidenza che le eccDNA corte sono predicibili dalla sola sequenza, pur
+  con origine genomica quasi casuale — la premessa di fondo di questa ricerca.
+- Li J., Liu Z., Zhang Z., "eccDNAMamba: A Pre-Trained Model for Ultra-Long
+  eccDNA Sequence Analysis", arXiv:2506.18940, 2025.
+  DOI: [10.48550/arXiv.2506.18940](https://doi.org/10.48550/arXiv.2506.18940).
+  Fonte dell'augmentation a "tiling circolare" usata in
+  `eccdna_utils.one_hot_encode_circular`.
+- Fang J. et al., "Detection of primary cancer types via fragment size
+  selection in circulating cell-free extrachromosomal circular DNA",
+  *Genome Medicine* 18:18, 2026.
+  DOI: [10.1186/s13073-025-01595-6](https://doi.org/10.1186/s13073-025-01595-6).
+  Conferma indipendente che la lunghezza del frammento di eccDNA porta
+  segnale biologico reale — coerente con perché va comunque trattata come
+  confondente da controllare, non da ignorare, nella nostra analisi.
+- "Application of Deep Learning in the Identification of Extrachromosomal
+  Circular DNA (eccDNA)", ACM, 2025.
+  DOI: [10.1145/3757110.3757175](https://doi.org/10.1145/3757110.3757175).
