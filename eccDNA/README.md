@@ -1,13 +1,13 @@
 # eccDNA — ricerca sui descrittori biologici/statistici
 
-Prima di classificare le sequenze di eccDNA (extrachromosomal circular DNA)
-come sane o associate a malattia, il tutor ha chiesto di individuare quali
-descrittori biologici e statistici (composizione, entropia/disordine,
-complessità, ripetizioni) si possono estrarre dalla sequenza per allenare
-una rete neurale. Questo repo, nella sua forma attuale, è la pipeline che
-risponde a quella domanda: dai metadati grezzi alla scoperta, sottotipo di
-malattia per sottotipo, di quali descrittori portano segnale reale e non
-un artefatto dei dati.
+L'obiettivo è individuare quali descrittori biologici e statistici
+(composizione, entropia/disordine, complessità, ripetizioni) si possono
+estrarre dalla sequenza di eccDNA (extrachromosomal circular DNA) per
+allenare una rete neurale che la classifichi come sana o associata a
+malattia. Questo repo, nella sua forma attuale, è la pipeline che risponde
+a quella domanda: dai metadati grezzi alla scoperta, sottotipo di malattia
+per sottotipo, di quali descrittori portano segnale reale e non un
+artefatto dei dati.
 
 Per la descrizione del dataset grezzo (colonne, split, note sui valori
 mancanti) vedi `../README_disease_detection.md`, scritto dal tutor.
@@ -20,9 +20,7 @@ pip install -r requirements.txt
 ```
 
 `requirements.txt` contiene solo `pandas`, `numpy`, `scikit-learn`: tutto
-cio' che serve alla pipeline attiva. Per rilanciare gli script archiviati in
-`vecchi/` (vedi sezione 5) serve installare a parte anche `torch`,
-`matplotlib` e `tqdm`.
+cio' che serve alla pipeline attiva.
 
 ## 2. Dati necessari (non su git)
 
@@ -95,19 +93,7 @@ sottotipo usa un metodo di sequenziamento quasi assente nel pool sano
 dell'intero dataset (es. solo 2 sequenze sane con WGS su 445.138 sane
 totali) — non un limite dello script, un limite dei dati sorgente.
 
-## 5. Script archiviati (`vecchi/`, fuori da git)
-
-La cartella `vecchi/` (accanto a questo repo, ignorata da git) contiene la
-pipeline di classificazione esplorata prima di questa ricerca sui
-descrittori — non più collegata al lavoro attuale, tenuta solo per
-riferimento: `model.py` (CNN), `train_classifier.py`,
-`build_classification_dataset.py`, `baseline_kmer_model.py`,
-`kmer_extractor.py`, `triplet_generator.py`, `descriptor_understanding.py`
-(la prima versione, aggregata su tutte le malattie insieme — superata da
-`descriptor_understanding_by_disease.py` perché l'aggregazione annacqua il
-segnale specifico di ogni sottotipo).
-
-## 6. File principali
+## 5. File principali
 
 | File | Ruolo |
 |---|---|
@@ -117,7 +103,7 @@ segnale specifico di ogni sottotipo).
 | `descriptor_understanding_by_disease.py` | Scoperta dei descrittori per sottotipo, con controllo dei confondenti lunghezza/metodo |
 | `descriptor_extractor.py` | Estrazione dei descrittori per le malattie con segnale confermato (stadio di produzione) |
 
-## 7. Bibliografia
+## 6. Bibliografia
 
 Paper di riferimento consultati per la scelta dei descrittori e per il
 contesto sull'eccDNA (i PDF restano solo in locale in `Paper/`, non su git —
