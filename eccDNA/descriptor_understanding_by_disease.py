@@ -357,10 +357,10 @@ def main():
             descrittori["length"] = len(sequence)  # SOLO diagnostico: non e' un feature del modello
             righe.append(descrittori)
     df_desc = pd.DataFrame(righe).set_index("id")
-    df_desc = df_desc.dropna(subset=DESCRIPTOR_NAMES)  # lz_complexity e' None sulle sequenze troppo lunghe
+    df_desc = df_desc.dropna(subset=DESCRIPTOR_NAMES)
     df_desc["method"] = df_desc.index.map(method_series).astype(object).fillna("Unknown")
     print(f"Descrittori calcolati per {len(df_desc)}/{len(all_wanted_ids)} sequenze richieste "
-          f"(esclude 'N'/lunghezza insufficiente e sequenze troppo lunghe per lz_complexity).")
+          f"(esclude 'N'/lunghezza insufficiente).")
 
     print("\n--- FASE 4: ANALISI PER SOTTOTIPO (media +/- std, lunghezza/metodo, AUC grezzo vs matched) ---")
     risultati = []

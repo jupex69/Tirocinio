@@ -1,47 +1,80 @@
 """Funzioni condivise dalla pipeline eccDNA.
 
-Attivamente usate oggi (ricerca sui descrittori biologici/statistici):
-- read_fasta_stream / load_sequences: lettura streaming del FASTA, RAM-safe
-- compute_sequence_descriptors e le funzioni di supporto (entropia,
-  complessita' di Lempel-Ziv, eterogeneita' interna a finestre): usate da
-  descriptor_extractor.py e descriptor_understanding_by_disease.py
-- check_fasta_metadata_alignment: controllo di coerenza id TSV <-> FASTA
-
-Funzioni storiche (usate solo dagli script archiviati in vecchi/, tenute
-qui per riferimento/compatibilita' ma non toccate dalla pipeline attuale):
-- one_hot_encode_circular: codifica per il classificatore CNN (model.py,
-  train_classifier.py)
-- sample_balanced_ids: campionamento bilanciato sano/malato usato da
-  build_classification_dataset.py
-
-NOTA: triplet_generator.py (anch'esso in vecchi/) non usava queste funzioni
-di proposito, per non cambiare la logica random che aveva generato i
-triplet CSV.
+- read_fasta_stream: lettura streaming del FASTA, RAM-safe
+- compute_sequence_descriptors e le funzioni di supporto (composizione/skew,
+  CpG e firma dinucleotidica, ripetizioni, entropia, termodinamica del duplex,
+  periodicita'): usate da descriptor_extractor.py e
+  descriptor_understanding_by_disease.py
 """
 
 import math
-import random
 import statistics
 from collections import Counter
 
 import numpy as np
-import pandas as pd
 
 BASES = "ACGT"
-BASE_TO_IDX = {b: i for i, b in enumerate(BASES)}
-# Ridotto da 15 a questi 6 dopo l'analisi per sottotipo in
-# descriptor_understanding_by_disease.py: sono la famiglia entropia/complessita'
-# (entropy_tri, cond_entropy_1, cond_entropy_2, lz_complexity) piu' quella di
-# eterogeneita' interna (gc_window_std, entropy_tri_window_std) - insieme
-# classificano bene 12 delle 17 malattie con segnale robusto confermato,
-# contro un contributo trascurabile delle altre 9 (composizione/ripetizioni).
+# lz_complexity (complessita' di Lempel-Ziv) e' stata rimossa: dipende troppo
+# dalla metodologia di sequenziamento. Sopra LZ_COMPLEXITY_MAX_LENGTH (ex
+# 20000 bp) l'algoritmo O(n^2) veniva saltato e ritornava None, e quella
+# soglia di lunghezza correla con 'method' (i protocolli producono frammenti
+# di lunghezza tipica diversa) - un canale con cui il confondente rientrava
+# dalla porta sul retro anche a valle del campionamento bilanciato per
+# metodo. Anche da calcolata, la normalizzazione c(n)*log2(n)/(2n) resta
+# distorta su sequenze corte, un'altra via indiretta per cui la lunghezza
+# poteva trapelare nel descrittore. Vedi README per il dettaglio.
+#
+# Al suo posto sono stati reintrodotti/aggiunti descrittori puramente
+# compositivi (rapporti/frazioni/medie per passo, indipendenti da lunghezza e
+# metodo di sequenziamento - vedi i docstring delle singole funzioni),
+# organizzati in famiglie biologico/statistiche:
+# - composizione/skew: gc_content, gc_skew, at_skew, purine_pyrimidine_skew
+# - bias a coppie di basi: cpg_oe, dinuc_signature_dist
+# - ripetizioni: tandem_repeat_fraction
+# - entropia/complessita': entropy_tri, cond_entropy_1, cond_entropy_2
+# - termodinamica del duplex: nn_stability_mean, nn_stability_std
+# - periodicita' di sequenza: periodicity_3bp, periodicity_10bp
+#
+# Questi 14 sono il set FINALE, selezionato dopo aver validato 18 candidati con
+# descriptor_understanding_by_disease.py (importanza RF + AUC univariata,
+# aggregate sulle 17 malattie robuste, nel blocco method+length-matched). Sono
+# stati scartati 4 descrittori a contributo trascurabile una volta controllati
+# i confondenti:
+# - g4_fraction (G-quadruplex): 1.4% di importanza, ultimo di tutti - la
+#   biologia c'era ma il segnale nei dati no.
+# - gc_window_std, entropy_tri_window_std (eterogeneita' interna a finestre):
+#   AUC univariata alta sul grezzo (~0.14) ma che CROLLA a ~0.02 sotto il
+#   controllo lunghezza+metodo - misurando la varianza tra finestre catturavano
+#   in parte la lunghezza (piu' finestre = sequenza piu' lunga), un confondente.
+# - palindrome_density: consistentemente nel gruppo debole.
+# Delle 3 famiglie nuove aggiunte (termodinamica, periodicita', G-quadruplex),
+# le prime due hanno portato segnale reale (nn_stability_mean e' il 4o
+# descrittore piu' importante in assoluto), la terza no ed e' stata rimossa -
+# esito coerente con l'obiettivo "pochi descrittori ma molto informativi".
 DESCRIPTOR_NAMES = [
+    "gc_content", "gc_skew", "at_skew", "purine_pyrimidine_skew",
+    "cpg_oe", "dinuc_signature_dist",
+    "tandem_repeat_fraction",
     "entropy_tri", "cond_entropy_1", "cond_entropy_2",
-    "lz_complexity", "gc_window_std", "entropy_tri_window_std",
+    "nn_stability_mean", "nn_stability_std",
+    "periodicity_3bp", "periodicity_10bp",
 ]
-LZ_COMPLEXITY_MAX_LENGTH = 20000  # oltre questa soglia lz76_complexity (O(n^2) nel caso peggiore) viene saltata
-WINDOWED_HETEROGENEITY_WINDOW = 150  # dimensione delle finestre non sovrapposte per gc/entropy_tri_window_std
-WINDOWED_HETEROGENEITY_MIN_WINDOWS = 3  # sotto questa soglia la sequenza e' troppo corta per misurare eterogeneita'
+TANDEM_REPEAT_MAX_UNIT = 6  # lunghezza massima dell'unita' ripetuta cercata (1..6 bp)
+TANDEM_REPEAT_MIN_COPIES = 3  # minimo di copie consecutive per contare come ripetizione
+
+# Energia libera nearest-neighbor (ΔG a 37 gradi C, kcal/mol) per ciascuno dei
+# 16 passi dinucleotidici - parametri unificati di SantaLucia (1998), lo
+# standard per la stabilita' del duplex di DNA. Valori piu' negativi = coppia
+# di basi adiacenti che lega piu' forte (es. GC/CG molto stabili, TA/AT deboli).
+# La tabella e' simmetrica per complemento inverso (AA=TT, CA=TG, ...): e' una
+# proprieta' fisica del passo, non del singolo filamento.
+NN_DELTA_G = {
+    "AA": -1.00, "AC": -1.44, "AG": -1.28, "AT": -0.88,
+    "CA": -1.45, "CC": -1.84, "CG": -2.17, "CT": -1.28,
+    "GA": -1.30, "GC": -2.24, "GG": -1.84, "GT": -1.44,
+    "TA": -0.58, "TC": -1.30, "TG": -1.45, "TT": -1.00,
+}
+PERIODICITY_MIN_LENGTH = 40  # sotto questa lunghezza l'autocorrelazione a lag 10 e' troppo rumorosa
 
 
 def extract_fasta_id(header_line):
@@ -79,15 +112,6 @@ def read_fasta_stream(fasta_path, wanted_ids=None):
             yield seq_id, "".join(chunks)
 
 
-def load_sequences(fasta_path, wanted_ids):
-    """Carica in un dict SOLO le sequenze i cui id sono in 'wanted_ids'."""
-    wanted_ids = set(str(i) for i in wanted_ids)
-    sequences = {}
-    for seq_id, seq in read_fasta_stream(fasta_path, wanted_ids=wanted_ids):
-        sequences[seq_id] = seq
-    return sequences
-
-
 def _kmer_counts(sequence, k):
     """Counter dei k-meri sovrapposti + il loro totale (denominatore per le frequenze)."""
     kmers = [sequence[i:i + k] for i in range(len(sequence) - k + 1)]
@@ -103,107 +127,200 @@ def _entropy_bits_from_counts(counts, total):
     return entropia
 
 
-def lz76_complexity(sequence):
-    """Complessita' di Lempel-Ziv (algoritmo di Kaspar & Schuster, 1987).
+def gc_content(base_counts, lunghezza):
+    """Frazione di basi G+C sul totale: il descrittore compositivo piu'
+    elementare, un rapporto puro (non dipende dalla lunghezza assoluta della
+    sequenza ne' dal metodo di sequenziamento che l'ha prodotta)."""
+    g, c = base_counts.get("G", 0), base_counts.get("C", 0)
+    return (g + c) / lunghezza if lunghezza > 0 else 0.0
 
-    Conta il numero di sottostringhe distinte prodotte dalla scansione
-    incrementale della sequenza: una sequenza ripetitiva produce poche
-    sottostringhe (c basso), una casuale ne produce molte (c alto). E' una
-    misura di "disordine" complementare all'entropia: l'entropia guarda solo
-    le frequenze dei k-meri, la complessita' di LZ cattura anche ripetizioni
-    e struttura a lungo raggio che l'entropia puo' non vedere (es. un
-    tandem repeat di un motivo che compare comunque raramente in frequenza).
+
+def gc_at_skew(base_counts):
+    """Skew di composizione (G-C)/(G+C) e (A-T)/(A+T) da un Counter di basi.
+
+    Cattura l'asimmetria tra le due basi di ciascuna coppia complementare
+    (bias di filamento), un'informazione che gc_content da solo non vede:
+    due sequenze con la stessa % di GC possono avere composizione G/C molto
+    diversa tra loro.
     """
-    n = len(sequence)
-    if n < 2:
-        return 1
-    i, k, l = 0, 1, 1
-    c, k_max = 1, 1
-    while True:
-        if sequence[i + k - 1] == sequence[l + k - 1]:
-            k += 1
-            if l + k > n:
-                c += 1
-                break
-        else:
-            if k > k_max:
-                k_max = k
-            i += 1
-            if i == l:
-                c += 1
-                l += k_max
-                if l + 1 > n:
-                    break
-                i = 0
-                k = 1
-                k_max = 1
-            else:
-                k = 1
-    return c
+    g, c = base_counts.get("G", 0), base_counts.get("C", 0)
+    a, t = base_counts.get("A", 0), base_counts.get("T", 0)
+    gc_skew = (g - c) / (g + c) if (g + c) > 0 else 0.0
+    at_skew = (a - t) / (a + t) if (a + t) > 0 else 0.0
+    return gc_skew, at_skew
 
 
-def lz_complexity_normalized(sequence):
-    """Complessita' di LZ normalizzata: c(n) * log2(n) / (2n).
-
-    Tende a 1 per una sequenza casuale su alfabeto di 4 simboli, si abbassa
-    verso 0 per una sequenza ripetitiva - stessa convenzione (0=ripetitivo,
-    1=disordine massimo) usata per le entropie, cosi' e' confrontabile.
-    Ritorna None per sequenze piu' lunghe di LZ_COMPLEXITY_MAX_LENGTH:
-    l'algoritmo e' O(n^2) nel caso peggiore e diventerebbe troppo costoso
-    su sequenze molto lunghe estratte su milioni di record.
+def purine_pyrimidine_skew(base_counts):
+    """Skew purine/pirimidine (A+G-C-T)/(A+G+C+T): asimmetria di composizione
+    sull'asse purina/pirimidina, complementare a gc_skew/at_skew (che
+    guardano l'asse delle coppie complementari). Formulato come skew
+    (differenza su somma, in [-1, 1]) invece che come rapporto grezzo per
+    restare limitato anche quando pirimidine=0.
     """
-    n = len(sequence)
-    if n > LZ_COMPLEXITY_MAX_LENGTH:
-        return None
-    if n < 4:
+    purine = base_counts.get("A", 0) + base_counts.get("G", 0)
+    pirimidine = base_counts.get("C", 0) + base_counts.get("T", 0)
+    totale = purine + pirimidine
+    return (purine - pirimidine) / totale if totale > 0 else 0.0
+
+
+def cpg_observed_over_expected(sequence, base_counts):
+    """Rapporto CpG osservato/atteso: proxy di metilazione/pressione selettiva.
+
+    Numeratore e denominatore scalano entrambi con la lunghezza della
+    sequenza (sono frequenze, non conteggi grezzi), quindi il rapporto resta
+    indipendente dalla lunghezza assoluta.
+    """
+    lunghezza = len(sequence)
+    freq_c = base_counts.get("C", 0) / lunghezza
+    freq_g = base_counts.get("G", 0) / lunghezza
+    if freq_c == 0 or freq_g == 0:
         return 0.0
-    c = lz76_complexity(sequence)
-    return c * math.log2(n) / (2 * n)
+
+    n_cg = sum(1 for i in range(lunghezza - 1) if sequence[i:i + 2] == "CG")
+    freq_cg_osservata = n_cg / (lunghezza - 1)
+    return freq_cg_osservata / (freq_c * freq_g)
 
 
-def windowed_heterogeneity(sequence, window_size=WINDOWED_HETEROGENEITY_WINDOW,
-                            min_windows=WINDOWED_HETEROGENEITY_MIN_WINDOWS):
-    """gc_window_std, entropy_tri_window_std: quanto composizione e complessita'
-    variano tra finestre non sovrapposte della stessa sequenza.
+def dinucleotide_signature_distance(base_counts, di_counts, di_total, lunghezza):
+    """'Firma genomica' di Karlin: media di |rho_xy - 1| sui 16 dinucleotidi,
+    dove rho_xy = f(xy) / (f(x)*f(y)). Generalizza cpg_oe a tutte le coppie
+    di basi: quantifica quanto la composizione a coppie si discosta da
+    quella attesa per indipendenza (bias globale, non solo CpG).
+    """
+    freq_base = {b: base_counts.get(b, 0) / lunghezza for b in BASES}
+    scarti = []
+    for x in BASES:
+        for y in BASES:
+            fx, fy = freq_base[x], freq_base[y]
+            if fx == 0 or fy == 0:
+                continue
+            f_xy = di_counts.get(x + y, 0) / di_total
+            rho = f_xy / (fx * fy)
+            scarti.append(abs(rho - 1))
+    return sum(scarti) / len(scarti) if scarti else 0.0
 
-    Tutti gli altri descrittori sono medie globali sull'intera sequenza e non
-    vedono l'eterogeneita' INTERNA: una sequenza "a mosaico" (piu' regioni
-    genomiche di origine diversa fuse insieme - un fenomeno di eccDNA
-    "complesso" documentato in letteratura per alcuni tumori) puo' avere la
-    stessa media di una sequenza omogenea ma varianza locale molto diversa.
-    Ritorna (0.0, 0.0) se la sequenza e' troppo corta per almeno min_windows
-    finestre (eterogeneita' non misurabile in modo affidabile).
+
+def tandem_repeat_fraction(sequence, max_unit=TANDEM_REPEAT_MAX_UNIT, min_copies=TANDEM_REPEAT_MIN_COPIES):
+    """Frazione della sequenza coperta da ripetizioni in tandem semplici
+    (unita' di 1..max_unit basi, ripetuta almeno min_copies volte di fila).
+
+    La formazione di eccDNA e' spesso mediata da ripetizioni genomiche
+    (dirette o invertite): questo descrittore cattura un aspetto strutturale
+    diverso da composizione/entropia - non "quanto e' prevedibile la
+    sequenza" ma "quanto e' letteralmente occupata da un motivo ripetuto".
+    E' una frazione (copertura/lunghezza totale), non un conteggio grezzo:
+    resta confrontabile tra sequenze di lunghezza diversa. Scansione greedy:
+    a ogni posizione si cerca la ripetizione piu' lunga (su tutte le
+    lunghezze di unita' provate), poi si salta oltre la regione coperta.
+    O(n * max_unit).
     """
     n = len(sequence)
-    n_windows = n // window_size
-    if n_windows < min_windows:
+    if n == 0:
+        return 0.0
+    covered = 0
+    i = 0
+    while i < n:
+        miglior_lunghezza = 0
+        for unit in range(1, max_unit + 1):
+            if i + unit * min_copies > n:
+                continue
+            u = sequence[i:i + unit]
+            copie = 1
+            j = i + unit
+            while j + unit <= n and sequence[j:j + unit] == u:
+                copie += 1
+                j += unit
+            if copie >= min_copies:
+                lunghezza = copie * unit
+                if lunghezza > miglior_lunghezza:
+                    miglior_lunghezza = lunghezza
+        if miglior_lunghezza > 0:
+            covered += miglior_lunghezza
+            i += miglior_lunghezza
+        else:
+            i += 1
+    return covered / n
+
+
+def nearest_neighbor_stability(sequence):
+    """nn_stability_mean, nn_stability_std: stabilita' termodinamica del duplex
+    di DNA dal modello nearest-neighbor (energia libera ΔG, tabella NN_DELTA_G).
+
+    A differenza di gc_content, che guarda solo QUANTE G/C ci sono, questo
+    guarda QUALI basi sono adiacenti: la forza con cui i due filamenti legano
+    dipende dalla coppia di passi (es. un passo GC lega molto piu' di un passo
+    TA anche a parita' di contenuto GC complessivo). E' una proprieta' fisica
+    misurata sperimentalmente, non una statistica di conteggio.
+
+    Si scorre la sequenza a coppie consecutive, si somma il ΔG di ogni passo e
+    si ritorna (media, deviazione standard) dei ΔG per passo:
+    - media: stabilita' complessiva del duplex (piu' negativa = piu' stabile).
+      E' una media per passo, quindi indipendente dalla lunghezza.
+    - std: quanto la stabilita' e' omogenea o "a chiazze" lungo la molecola,
+      un asse di eterogeneita' fisica basato sull'energia di legame e non sulla
+      sola composizione delle basi.
+    Ritorna (0.0, 0.0) per sequenze troppo corte per almeno un passo.
+    """
+    valori = [NN_DELTA_G[sequence[i:i + 2]] for i in range(len(sequence) - 1)
+              if sequence[i:i + 2] in NN_DELTA_G]
+    if not valori:
         return 0.0, 0.0
+    media = sum(valori) / len(valori)
+    std = statistics.pstdev(valori) if len(valori) >= 2 else 0.0
+    return media, std
 
-    gc_vals, entropy_vals = [], []
-    for i in range(n_windows):
-        window = sequence[i * window_size:(i + 1) * window_size]
-        g, c = window.count("G"), window.count("C")
-        gc_vals.append((g + c) / len(window))
-        tri_counts, tri_total = _kmer_counts(window, 3)
-        if tri_total > 0:
-            entropy_vals.append(_entropy_bits_from_counts(tri_counts, tri_total) / 6)
 
-    gc_std = statistics.pstdev(gc_vals) if len(gc_vals) >= 2 else 0.0
-    entropy_std = statistics.pstdev(entropy_vals) if len(entropy_vals) >= 2 else 0.0
-    return gc_std, entropy_std
+def _autocorrelation_at_lag(signal, lag):
+    """Autocorrelazione (coefficiente di Pearson) di un segnale numerico con
+    se stesso spostato di 'lag' posizioni. Misura quanto la sequenza si
+    'assomiglia' a distanza fissa: valori alti = periodicita' a quel passo."""
+    n = len(signal)
+    if n <= lag + 1:
+        return 0.0
+    x = signal[:n - lag]
+    y = signal[lag:]
+    mx, my = x.mean(), y.mean()
+    denom = math.sqrt(((x - mx) ** 2).sum() * ((y - my) ** 2).sum())
+    if denom == 0:
+        return 0.0
+    return float(((x - mx) * (y - my)).sum() / denom)
+
+
+def sequence_periodicity(sequence):
+    """periodicity_3bp, periodicity_10bp: forza della periodicita' della
+    sequenza a passo 3 e a passo 10 basi, via autocorrelazione.
+
+    Biologia: le regioni codificanti hanno una periodicita' di 3 basi (i
+    codoni); il DNA avvolto sui nucleosomi mostra una periodicita' di ~10 basi
+    nei dinucleotidi A/T. Sono impronte di come la sequenza e' usata nella
+    cellula, non catturate da entropia/composizione (che sono 'senza scala').
+
+    Statistica: la sequenza viene codificata come segnale binario W/S
+    (A o T = 1, G o C = 0) e se ne calcola l'autocorrelazione a lag 3 e lag 10.
+    E' un coefficiente in [-1, 1], indipendente dalla lunghezza. Ritorna
+    (0.0, 0.0) per sequenze piu' corte di PERIODICITY_MIN_LENGTH (a lag 10 il
+    segnale sarebbe troppo rumoroso per essere affidabile).
+    """
+    n = len(sequence)
+    if n < PERIODICITY_MIN_LENGTH:
+        return 0.0, 0.0
+    signal = np.fromiter((1.0 if b in "AT" else 0.0 for b in sequence), dtype=np.float64, count=n)
+    return _autocorrelation_at_lag(signal, 3), _autocorrelation_at_lag(signal, 10)
 
 
 def compute_sequence_descriptors(sequence):
-    """Calcola i 6 descrittori biologici/statistici per una sequenza.
+    """Calcola i 14 descrittori biologici/statistici per una sequenza.
 
     Ritorna un dict con le chiavi in DESCRIPTOR_NAMES. La sequenza deve
     essere gia' filtrata a monte (niente 'N', lunghezza minima >= 3): qui
     non viene rifatto quel controllo per evitare di duplicare la logica di
     filtro tra descriptor_extractor.py e descriptor_understanding*.py.
 
-    lz_complexity puo' essere None per sequenze molto lunghe (vedi
-    lz_complexity_normalized) - va gestito a valle (es. dropna prima di
-    allenare un modello).
+    Tutti i valori sono rapporti/frazioni/differenze normalizzate/medie per
+    passo (mai conteggi grezzi), cosi' da non dipendere dalla lunghezza
+    assoluta della sequenza ne' dal metodo di sequenziamento che l'ha prodotta
+    - vedi descriptor_understanding_by_disease.py per la verifica empirica di
+    questa proprieta' (AUC length-matched/method-matched/method+length-matched).
     """
     lunghezza = len(sequence)
     base_counts = Counter(sequence)
@@ -214,142 +331,34 @@ def compute_sequence_descriptors(sequence):
     h2 = _entropy_bits_from_counts(di_counts, di_total)
     h3 = _entropy_bits_from_counts(tri_counts, tri_total)
 
-    gc_window_std, entropy_tri_window_std = windowed_heterogeneity(sequence)
+    gc_skew, at_skew = gc_at_skew(base_counts)
+    nn_stability_mean, nn_stability_std = nearest_neighbor_stability(sequence)
+    periodicity_3bp, periodicity_10bp = sequence_periodicity(sequence)
 
     return {
+        "gc_content": gc_content(base_counts, lunghezza),
+        "gc_skew": gc_skew,
+        "at_skew": at_skew,
+        "purine_pyrimidine_skew": purine_pyrimidine_skew(base_counts),
+        "cpg_oe": cpg_observed_over_expected(sequence, base_counts),
+        "dinuc_signature_dist": dinucleotide_signature_distance(base_counts, di_counts, di_total, lunghezza),
+        "tandem_repeat_fraction": tandem_repeat_fraction(sequence),
         "entropy_tri": h3 / 6,
         "cond_entropy_1": (h2 - h1) / 2,
         "cond_entropy_2": (h3 - h2) / 2,
-        "lz_complexity": lz_complexity_normalized(sequence),
-        "gc_window_std": gc_window_std,
-        "entropy_tri_window_std": entropy_tri_window_std,
+        "nn_stability_mean": nn_stability_mean,
+        "nn_stability_std": nn_stability_std,
+        "periodicity_3bp": periodicity_3bp,
+        "periodicity_10bp": periodicity_10bp,
     }
-
-
-def one_hot_encode_circular(sequence, window_size=1024, wrap_len=64):
-    """Codifica one-hot (4, window_size) con augmentation circolare.
-
-    L'eccDNA e' una molecola circolare: non ha un vero "inizio" o "fine".
-    Invece di riempire con zeri le sequenze piu' corte della finestra
-    (come farebbe un padding lineare classico), la sequenza viene
-    "arrotolata" (tiling circolare) fino a riempire la finestra - idea
-    alla base della cyclic-padding di ECCNET. In coda alla finestra viene
-    inoltre sempre appesa una piccola porzione iniziale della sequenza
-    (default 64 basi, come l'augmentation di eccDNAMamba) per rinforzare
-    l'adiacenza testa-coda anche quando la sequenza viene troncata perche'
-    piu' lunga della finestra.
-
-    Basi non standard (es. 'N') vengono codificate come colonna tutta zero,
-    seguendo la stessa convenzione usata da DeepECC.
-    """
-    if window_size <= wrap_len:
-        raise ValueError("window_size deve essere maggiore di wrap_len")
-    if len(sequence) == 0:
-        raise ValueError("sequenza vuota")
-
-    core_len = window_size - wrap_len
-    sequence = sequence.upper()
-    seq_len = len(sequence)
-
-    def _circular_take(s, length):
-        if len(s) >= length:
-            return s[:length]
-        reps = length // len(s) + 1
-        return (s * reps)[:length]
-
-    core = _circular_take(sequence, core_len)
-    wrap = _circular_take(sequence, wrap_len)
-    window = core + wrap
-
-    encoded = np.zeros((4, window_size), dtype=np.float32)
-    for i, base in enumerate(window):
-        idx = BASE_TO_IDX.get(base)
-        if idx is not None:
-            encoded[idx, i] = 1.0
-    return encoded
-
-
-def sample_balanced_ids(df_split, n, seed=42, id_col="id",
-                         label_col="disease_binary_label", disease_col="disease"):
-    """Campiona ~n righe da df_split, bilanciate 50/50 sano/malato e,
-    tra i malati, il piu' possibile uniformi tra i diversi tipi di malattia
-    (stessa idea anti-bias-Cancro-Gastrico di triplet_generator.py, ma qui
-    si campionano righe unica (senza ripetizioni) invece di ancore/triplette).
-
-    Ritorna un DataFrame con colonne: id, label, disease.
-    """
-    rng = random.Random(seed)
-
-    healthy_ids = df_split.loc[df_split[label_col] == 0, id_col].astype(str).tolist()
-    rng.shuffle(healthy_ids)
-
-    disease_df = df_split.loc[df_split[label_col] == 1].copy()
-    disease_df[id_col] = disease_df[id_col].astype(str)
-    id_to_disease = dict(zip(disease_df[id_col], disease_df[disease_col]))
-
-    disease_types = sorted(disease_df[disease_col].dropna().unique().tolist())
-    ids_by_type = {
-        t: disease_df.loc[disease_df[disease_col] == t, id_col].tolist()
-        for t in disease_types
-    }
-    for ids in ids_by_type.values():
-        rng.shuffle(ids)
-
-    half = n // 2
-    healthy_sample = healthy_ids[:half]
-
-    disease_sample = []
-    pointers = {t: 0 for t in disease_types}
-    exhausted = set()
-    i = 0
-    while len(disease_sample) < half and len(exhausted) < len(disease_types):
-        t = disease_types[i % len(disease_types)]
-        i += 1
-        if t in exhausted:
-            continue
-        p = pointers[t]
-        if p < len(ids_by_type[t]):
-            disease_sample.append(ids_by_type[t][p])
-            pointers[t] = p + 1
-        else:
-            exhausted.add(t)
-
-    rows = [{"id": _id, "label": 0, "disease": "Healthy"} for _id in healthy_sample]
-    rows += [{"id": _id, "label": 1, "disease": id_to_disease.get(_id, "Unknown")}
-             for _id in disease_sample]
-
-    result = pd.DataFrame(rows)
-    result = result.sample(frac=1, random_state=seed).reset_index(drop=True)
-    return result
-
-
-def check_fasta_metadata_alignment(fasta_path, tsv_path, n=5):
-    """Controllo di coerenza id TSV <-> id FASTA (sostituisce debug_ids.py).
-
-    Ritorna True se i primi 'n' id del TSV combaciano con i primi 'n' id
-    letti dal FASTA nello stesso ordine, False altrimenti.
-    """
-    df_head = pd.read_csv(tsv_path, sep="\t", nrows=n)
-    tsv_ids = df_head["id"].astype(str).tolist()
-
-    fasta_ids = []
-    with open(fasta_path, "r") as f:
-        for line in f:
-            if line.startswith(">"):
-                fasta_ids.append(extract_fasta_id(line))
-                if len(fasta_ids) == n:
-                    break
-
-    ok = tsv_ids == fasta_ids
-    if not ok:
-        print("ATTENZIONE: gli id del TSV e del FASTA non combaciano nell'ordine atteso.")
-        print("TSV:  ", tsv_ids)
-        print("FASTA:", fasta_ids)
-    return ok
 
 
 if __name__ == "__main__":
-    # Piccolo self-test manuale (non fa parte della pipeline).
-    demo = "ACGTACGTNN"
-    enc = one_hot_encode_circular(demo, window_size=16, wrap_len=4)
-    print("shape:", enc.shape, "sum per colonna (0 o 1):", enc.sum(axis=0))
+    # Piccolo self-test manuale (non fa parte della pipeline): calcola i
+    # descrittori su una sequenza demo e verifica che le chiavi combacino.
+    demo = "ACGTACGTACGTACGTACGTGGGGCCCCATATATAT" * 3
+    d = compute_sequence_descriptors(demo)
+    assert sorted(d) == sorted(DESCRIPTOR_NAMES), "chiavi descrittori incoerenti"
+    print(f"OK: {len(d)} descrittori calcolati sulla sequenza demo")
+    for nome in DESCRIPTOR_NAMES:
+        print(f"  {nome:24s} {d[nome]:.4f}")

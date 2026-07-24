@@ -1,10 +1,9 @@
 """Estrazione su larga scala dei descrittori biologici/statistici eccDNA.
 
-Stadio di PRODUZIONE della pipeline: calcola i 6 descrittori definiti in
+Stadio di PRODUZIONE della pipeline: calcola i descrittori definiti in
 eccdna_utils.compute_sequence_descriptors (DESCRIPTOR_NAMES) e li scrive su
 TSV, con lettura FASTA streaming (RAM-safe) e calcolo parallelizzato su piu'
-processi (il calcolo per sequenza e' CPU-bound puro Python - non vettorizzabile,
-lz_complexity in particolare e' O(n^2) nel caso peggiore).
+processi (il calcolo per sequenza e' CPU-bound puro Python - non vettorizzabile).
 
 Da lanciare SOLO dopo aver stabilito, con descriptor_understanding_by_disease.py,
 quali descrittori sono davvero informativi e quali sottotipi hanno un segnale
@@ -19,8 +18,11 @@ si campiona il malato (fino a --max-malato-per-disease, tutto se ce n'e' meno)
 e si costruisce un pool sano su misura bilanciato per metodo di sequenziamento
 (stessa logica, riusata da import, di descriptor_understanding_by_disease.py:
 build_method_balanced_healthy_sample/load_method_series_full). Il default sono
-le 12 malattie con segnale robusto confermato anche dopo il controllo
-combinato lunghezza+metodo (vedi README).
+le 17 malattie con segnale robusto confermato (AUC method+length-matched >=
+0.65) nella rianalisi dei descrittori - vedi README. Lista diversa da quella
+precedente (basata sui vecchi 6 descrittori, incluso lz_complexity ora
+rimosso): es. Lung cancer e' uscita dalla lista (scesa sotto soglia),
+Colorectal adenoma/Stomach/Hypopharynx cancer sono entrate.
 
 ABBINAMENTO MALATTIA<->SANO (--pairing-output-path): il pool sano NON e'
 disgiunto tra malattie - una stessa sequenza sana campionata con Circle_seq
@@ -69,13 +71,16 @@ WRITE_BUFFER_SIZE = 5000
 CHUNK_SIZE = 500  # sequenze per task inviato a un worker: ammortizza l'overhead di IPC tra processi
 HEADER = ["id"] + DESCRIPTOR_NAMES
 
-# Le 12 malattie con segnale robusto confermato anche dopo il controllo
-# combinato lunghezza+metodo (vedi descriptor_understanding_by_disease.py e README).
+# Le 17 malattie con segnale robusto (AUC method+length-matched >= 0.65) nella
+# rianalisi dei descrittori (vedi descriptor_understanding_by_disease.py e README).
+# Sostituisce la vecchia lista di 12 basata sui 6 descrittori precedenti (che
+# includevano lz_complexity, ora rimosso).
 DEFAULT_DISEASES = [
-    "Gastric cancer", "Colorectal cancer", "Stomach cancer", "Chronic kidney disease",
-    "Primary pulmonary hypertension", "Cataract", "Dilated cardiomyopathy",
-    "Glioblastoma cancer", "Coronary artery disease", "Caid syndrome",
-    "Lung cancer", "Systemic lupus erythematosus",
+    "Colorectal adenoma", "Systemic lupus erythematosus", "Primary pulmonary hypertension",
+    "Liver cancer", "Chronic kidney disease", "Colorectal cancer", "Hypopharynx cancer",
+    "Caid syndrome", "Breast cancer", "Stomach cancer", "Gastric cancer",
+    "Dilated cardiomyopathy", "Cataract", "Coronary artery disease", "Stomach",
+    "Glioblastoma cancer", "Hypopharyngeal squamous cell carcinoma",
 ]
 DEFAULT_MAX_MALATO_PER_DISEASE = 20000
 
