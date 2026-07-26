@@ -37,6 +37,30 @@ data/processed/eccdna_disease_detection.body.fa
 
 ## 3. Pipeline, in ordine
 
+**Flusso dei dati** (dove e quando la sequenza diventa 14 numeri):
+
+```text
+SEQUENZE GREZZE (lettere ACGT)
+  eccdna_disease_detection.body.fa
+        │
+        ▼   descriptor_extractor.py  →  chiama  eccdna_utils.compute_sequence_descriptors()
+CALCOLO DEI 14 DESCRITTORI          (qui, UNA VOLTA SOLA, prima di ogni addestramento)
+        │
+        ▼
+NUMERI GIA' PRONTI SU FILE
+  eccdna_descriptor_features.tsv   (una riga per sequenza: id + 14 numeri)
+        │
+        ▼   training_data.build_balanced_splits()
+DATASET BILANCIATO  =  14 colonne X  +  y (0/1)
+        │
+        ▼   train_models.py
+ADDESTRAMENTO E CONFRONTO DEI MODELLI
+  (il modello legge solo i numeri, mai le lettere ACGT)
+```
+
+Da qui in poi la sequenza originale non serve più: i modelli lavorano solo sui
+14 numeri gia' calcolati e salvati.
+
 | # | Comando | Cosa produce |
 |---|---|---|
 | 1 | `python dataUnderstanding.py` | Solo diagnostica: EDA + rilevamento data leakage sui metadati grezzi (non genera file) |
