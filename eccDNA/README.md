@@ -37,21 +37,21 @@ data/processed/eccdna_disease_detection.body.fa
 
 ## 3. Pipeline, in ordine
 
-**Flusso dei dati** (dove e quando la sequenza diventa 14 numeri):
+**Flusso dei dati** (dove e quando la sequenza diventa 10 numeri):
 
 ```text
 SEQUENZE GREZZE (lettere ACGT)
   eccdna_disease_detection.body.fa
         │
         ▼   descriptor_extractor.py  →  chiama  eccdna_utils.compute_sequence_descriptors()
-CALCOLO DEI 14 DESCRITTORI          (qui, UNA VOLTA SOLA, prima di ogni addestramento)
+CALCOLO DEI 10 DESCRITTORI          (qui, UNA VOLTA SOLA, prima di ogni addestramento)
         │
         ▼
 NUMERI GIA' PRONTI SU FILE
-  eccdna_descriptor_features.tsv   (una riga per sequenza: id + 14 numeri)
+  eccdna_descriptor_features.tsv   (una riga per sequenza: id + 10 numeri)
         │
         ▼   training_data.build_balanced_splits()
-DATASET BILANCIATO  =  14 colonne X  +  y (0/1)
+DATASET BILANCIATO  =  10 colonne X  +  y (0/1)
         │
         ▼   train_models.py
 ADDESTRAMENTO E CONFRONTO DEI MODELLI
@@ -59,39 +59,38 @@ ADDESTRAMENTO E CONFRONTO DEI MODELLI
 ```
 
 Da qui in poi la sequenza originale non serve più: i modelli lavorano solo sui
-14 numeri gia' calcolati e salvati.
+10 numeri gia' calcolati e salvati.
 
 | # | Comando | Cosa produce |
 |---|---|---|
 | 1 | `python dataUnderstanding.py` | Solo diagnostica: EDA + rilevamento data leakage sui metadati grezzi (non genera file) |
 | 2 | `python dataCleaning.py` | `eccdna_metadata_CLEAN.tsv` (metadati puliti, senza le colonne che causano leakage) |
 | 3 | `python descriptor_understanding_by_disease.py --diseases "..."` | Solo diagnostica: per i sottotipi indicati, calcola i descrittori su un campione e verifica quali sono informativi controllando i confondenti lunghezza e metodo (importanza RandomForest + AUC univariata per descrittore); non genera file |
-| 4 | `python descriptor_extractor.py` | `eccdna_descriptor_features.tsv` (i 14 descrittori estratti per le 17 malattie con segnale confermato) + `eccdna_disease_pairing.tsv` (abbinamento malattia↔id, necessario perché il pool sano è condiviso tra malattie) |
+| 4 | `python descriptor_extractor.py` | `eccdna_descriptor_features.tsv` (i 10 descrittori estratti per le 17 malattie con segnale confermato) + `eccdna_disease_pairing.tsv` (abbinamento malattia↔id, necessario perché il pool sano è condiviso tra malattie) |
 | 5 | `python train_models.py` | Costruisce il dataset bilanciato (`training_data.py`), allena e confronta i 6 modelli (`models_pytorch.py`), salva `model_comparison_results.tsv` e `model_comparison_per_disease.tsv` |
 
-## 4. I 14 descrittori
+## 4. I 10 descrittori
 
-Definiti in `eccdna_utils.compute_sequence_descriptors`. Sono tutti rapporti,
-frazioni o medie per passo (mai conteggi grezzi), quindi indipendenti per
-costruzione dalla lunghezza assoluta. Selezionati da 18 candidati tenendo solo
-quelli che reggono il controllo combinato lunghezza+metodo. Sei famiglie:
+Definiti in `eccdna_utils.compute_sequence_descriptors`. Sono tutti rapporti o
+frazioni (mai conteggi grezzi), quindi indipendenti per costruzione dalla
+lunghezza assoluta. Quattro famiglie:
 
 - **Composizione / skew**: `gc_content`, `gc_skew`, `at_skew`, `purine_pyrimidine_skew`
 - **Bias a coppie di basi**: `cpg_oe`, `dinuc_signature_dist`
 - **Ripetizioni**: `tandem_repeat_fraction`
 - **Entropia / complessità**: `entropy_tri`, `cond_entropy_1`, `cond_entropy_2`
-- **Termodinamica del duplex** (energia libera nearest-neighbor): `nn_stability_mean`, `nn_stability_std`
-- **Periodicità di sequenza** (autocorrelazione a 3 e 10 basi): `periodicity_3bp`, `periodicity_10bp`
 
-**Descrittori scartati** in fase di selezione, perché il loro contributo crolla
-una volta controllati i confondenti: `lz_complexity` (dipendeva dal metodo di
-sequenziamento tramite il cutoff di lunghezza), `gc_window_std` e
-`entropy_tri_window_std` (AUC univariata alta sul grezzo ma ~0.02 sotto controllo
-lunghezza+metodo: catturavano in parte la lunghezza), `palindrome_density` e
-`g4_fraction` (G-quadruplex, il più debole di tutti). Delle tre famiglie nuove
-testate, termodinamica e periodicità hanno portato segnale reale
-(`nn_stability_mean` è il 4° descrittore più importante in assoluto), il
-G-quadruplex no.
+**Percorso di selezione** (da 18 candidati a 10):
+1. Da 18 candidati, il controllo combinato lunghezza+metodo scarta 4 descrittori
+   deboli: `lz_complexity` (dipendeva dal metodo via cutoff di lunghezza),
+   `gc_window_std` e `entropy_tri_window_std` (AUC univariata alta grezza ma ~0.02
+   method+length-matched: catturavano la lunghezza), `palindrome_density` e
+   `g4_fraction` (G-quadruplex) → **14 descrittori**.
+2. Un'ablation rimuove anche **termodinamica** (`nn_stability_mean/std`) e
+   **periodicità** (`periodicity_3bp/10bp`): `nn_stability_mean` era correlato
+   **0.99 con `gc_content`** (contenuto di GC travestito), e togliendo tutte e 4
+   l'AUC del modello calava solo di ~0.004–0.011 (entro il rumore) → **10
+   descrittori**, più essenziali a parità di prestazioni.
 
 **Due confondenti** da controllare prima di fidarsi di qualunque segnale:
 - `length` (già noto, per questo escluso da `dataCleaning.py`)
@@ -129,21 +128,21 @@ Sei modelli (2 ML classico, 4 reti neurali PyTorch) sul test set bilanciato
 
 | Modello | ROC-AUC | Accuracy | Precision | Recall | F1 |
 |---|---|---|---|---|---|
-| MLP con attenzione | **0.789** | 0.716 | 0.686 | 0.798 | 0.738 |
-| Siamese (loss combinata) | 0.784 | 0.704 | 0.666 | 0.821 | 0.735 |
-| MLP profondo | 0.784 | 0.707 | 0.669 | 0.820 | 0.737 |
-| Gradient Boosting | 0.770 | 0.695 | 0.662 | 0.794 | 0.722 |
-| Random Forest | 0.769 | 0.691 | 0.637 | 0.888 | 0.742 |
-| Siamese (metric learning) | 0.512 | 0.504 | 0.502 | 0.883 | 0.640 |
+| MLP con attenzione | **0.779** | 0.706 | 0.675 | 0.795 | 0.730 |
+| MLP profondo | 0.778 | 0.704 | 0.669 | 0.809 | 0.732 |
+| Siamese (loss combinata) | 0.776 | 0.706 | 0.680 | 0.777 | 0.725 |
+| Gradient Boosting | 0.769 | 0.699 | 0.667 | 0.794 | 0.725 |
+| Random Forest | 0.758 | 0.680 | 0.632 | 0.859 | 0.728 |
+| Siamese (metric learning) | 0.545 | 0.527 | 0.517 | 0.824 | 0.636 |
 
 - I 4 approcci discriminativi (2 MLP, GBM, RF) più la siamese a loss combinata si
-  raggruppano entro ~2 punti di AUC: con 14 feature tabellari la complessità del
+  raggruppano entro ~2 punti di AUC: con poche feature tabellari la complessità del
   modello conta poco, il tetto lo danno i descrittori.
-- La siamese a **metric learning puro** fallisce (0.512, quasi caso): il paradigma
+- La siamese a **metric learning puro** fallisce (0.545, quasi caso): il paradigma
   contrastivo non si adatta a poche feature scalari con classi molto sovrapposte.
-  La variante a loss combinata arriva a 0.784 solo perché, col peso della triplet
+  La variante a loss combinata arriva a ~0.78 solo perché, col peso della triplet
   ridotto a 0.05, è di fatto un MLP.
-- L'AUC ~0.79 è più bassa di un ipotetico ~0.9 perché è **onesta**: sopravvive al
+- L'AUC ~0.78 è più bassa di un ipotetico ~0.9 perché è **onesta**: sopravvive al
   controllo dei confondenti e allo split per cluster genomico.
 
 Il riepilogo completo è anche nella docstring di `train_models.py`.
@@ -154,9 +153,9 @@ Il riepilogo completo è anche nella docstring di `train_models.py`.
 |---|---|
 | `dataUnderstanding.py` | EDA + rilevamento data leakage sui metadati grezzi |
 | `dataCleaning.py` | Pulizia metadati grezzi → `eccdna_metadata_CLEAN.tsv` |
-| `eccdna_utils.py` | Funzioni condivise: parsing FASTA, calcolo dei 14 descrittori |
+| `eccdna_utils.py` | Funzioni condivise: parsing FASTA, calcolo dei 10 descrittori |
 | `descriptor_understanding_by_disease.py` | Scoperta dei descrittori per sottotipo, con controllo dei confondenti lunghezza/metodo |
-| `descriptor_extractor.py` | Estrazione dei 14 descrittori per le malattie con segnale confermato (produzione) |
+| `descriptor_extractor.py` | Estrazione dei 10 descrittori per le malattie con segnale confermato (produzione) |
 | `training_data.py` | Assemblaggio del dataset bilanciato (50/50, method-matched per malattia) |
 | `models_pytorch.py` | Architetture PyTorch: MLP, MLP con attenzione, siamese (metric learning e loss combinata) |
 | `train_models.py` | Allena e confronta i 6 modelli, salva i risultati |
@@ -182,9 +181,5 @@ sull'eccDNA (i PDF restano solo in locale in `Paper/`, non su git):
   18:18, 2026. DOI: [10.1186/s13073-025-01595-6](https://doi.org/10.1186/s13073-025-01595-6).
   Conferma indipendente che la lunghezza del frammento porta segnale biologico
   reale — coerente con il trattarla come confondente da controllare, non da ignorare.
-- SantaLucia J., "A unified view of polymer, dumbbell, and oligonucleotide DNA
-  nearest-neighbor thermodynamics", *PNAS* 95(4), 1998.
-  DOI: [10.1073/pnas.95.4.1460](https://doi.org/10.1073/pnas.95.4.1460). Fonte dei
-  parametri ΔG nearest-neighbor usati nel descrittore `nn_stability`.
 - "Application of Deep Learning in the Identification of Extrachromosomal Circular
   DNA (eccDNA)", ACM, 2025. DOI: [10.1145/3757110.3757175](https://doi.org/10.1145/3757110.3757175).

@@ -2,16 +2,12 @@
 
 - read_fasta_stream: lettura streaming del FASTA, RAM-safe
 - compute_sequence_descriptors e le funzioni di supporto (composizione/skew,
-  CpG e firma dinucleotidica, ripetizioni, entropia, termodinamica del duplex,
-  periodicita'): usate da descriptor_extractor.py e
-  descriptor_understanding_by_disease.py
+  CpG e firma dinucleotidica, ripetizioni, entropia): usate da
+  descriptor_extractor.py e descriptor_understanding_by_disease.py
 """
 
 import math
-import statistics
 from collections import Counter
-
-import numpy as np
 
 BASES = "ACGT"
 # lz_complexity (complessita' di Lempel-Ziv) e' stata rimossa: dipende troppo
@@ -25,56 +21,34 @@ BASES = "ACGT"
 # poteva trapelare nel descrittore. Vedi README per il dettaglio.
 #
 # Al suo posto sono stati reintrodotti/aggiunti descrittori puramente
-# compositivi (rapporti/frazioni/medie per passo, indipendenti da lunghezza e
-# metodo di sequenziamento - vedi i docstring delle singole funzioni),
-# organizzati in famiglie biologico/statistiche:
+# compositivi (rapporti/frazioni, indipendenti da lunghezza e metodo di
+# sequenziamento - vedi i docstring delle singole funzioni), organizzati in
+# famiglie biologico/statistiche:
 # - composizione/skew: gc_content, gc_skew, at_skew, purine_pyrimidine_skew
 # - bias a coppie di basi: cpg_oe, dinuc_signature_dist
 # - ripetizioni: tandem_repeat_fraction
 # - entropia/complessita': entropy_tri, cond_entropy_1, cond_entropy_2
-# - termodinamica del duplex: nn_stability_mean, nn_stability_std
-# - periodicita' di sequenza: periodicity_3bp, periodicity_10bp
 #
-# Questi 14 sono il set FINALE, selezionato dopo aver validato 18 candidati con
-# descriptor_understanding_by_disease.py (importanza RF + AUC univariata,
-# aggregate sulle 17 malattie robuste, nel blocco method+length-matched). Sono
-# stati scartati 4 descrittori a contributo trascurabile una volta controllati
-# i confondenti:
-# - g4_fraction (G-quadruplex): 1.4% di importanza, ultimo di tutti - la
-#   biologia c'era ma il segnale nei dati no.
-# - gc_window_std, entropy_tri_window_std (eterogeneita' interna a finestre):
-#   AUC univariata alta sul grezzo (~0.14) ma che CROLLA a ~0.02 sotto il
-#   controllo lunghezza+metodo - misurando la varianza tra finestre catturavano
-#   in parte la lunghezza (piu' finestre = sequenza piu' lunga), un confondente.
-# - palindrome_density: consistentemente nel gruppo debole.
-# Delle 3 famiglie nuove aggiunte (termodinamica, periodicita', G-quadruplex),
-# le prime due hanno portato segnale reale (nn_stability_mean e' il 4o
-# descrittore piu' importante in assoluto), la terza no ed e' stata rimossa -
-# esito coerente con l'obiettivo "pochi descrittori ma molto informativi".
+# Questi 10 sono il set FINALE. Il percorso di selezione:
+# 1. da 18 candidati validati con descriptor_understanding_by_disease.py
+#    (importanza RF + AUC univariata sulle 17 malattie robuste, blocco
+#    method+length-matched) sono stati scartati 4 descrittori deboli:
+#    g4_fraction (G-quadruplex), gc_window_std, entropy_tri_window_std
+#    (eterogeneita' a finestre: AUC alta grezza ma ~0.02 method+length-matched,
+#    catturavano la lunghezza) e palindrome_density -> 14 descrittori.
+# 2. un'ablation successiva ha rimosso anche termodinamica (nn_stability_mean/std)
+#    e periodicita' (periodicity_3bp/10bp): nn_stability_mean era correlato 0.99
+#    con gc_content (GC travestito) e togliendo tutte e 4 l'AUC del modello
+#    calava solo di ~0.003-0.011 (entro il rumore) -> 10 descrittori, piu'
+#    essenziali a parita' di prestazioni. Coerente con "pochi ma forti".
 DESCRIPTOR_NAMES = [
     "gc_content", "gc_skew", "at_skew", "purine_pyrimidine_skew",
     "cpg_oe", "dinuc_signature_dist",
     "tandem_repeat_fraction",
     "entropy_tri", "cond_entropy_1", "cond_entropy_2",
-    "nn_stability_mean", "nn_stability_std",
-    "periodicity_3bp", "periodicity_10bp",
 ]
 TANDEM_REPEAT_MAX_UNIT = 6  # lunghezza massima dell'unita' ripetuta cercata (1..6 bp)
 TANDEM_REPEAT_MIN_COPIES = 3  # minimo di copie consecutive per contare come ripetizione
-
-# Energia libera nearest-neighbor (ΔG a 37 gradi C, kcal/mol) per ciascuno dei
-# 16 passi dinucleotidici - parametri unificati di SantaLucia (1998), lo
-# standard per la stabilita' del duplex di DNA. Valori piu' negativi = coppia
-# di basi adiacenti che lega piu' forte (es. GC/CG molto stabili, TA/AT deboli).
-# La tabella e' simmetrica per complemento inverso (AA=TT, CA=TG, ...): e' una
-# proprieta' fisica del passo, non del singolo filamento.
-NN_DELTA_G = {
-    "AA": -1.00, "AC": -1.44, "AG": -1.28, "AT": -0.88,
-    "CA": -1.45, "CC": -1.84, "CG": -2.17, "CT": -1.28,
-    "GA": -1.30, "GC": -2.24, "GG": -1.84, "GT": -1.44,
-    "TA": -0.58, "TC": -1.30, "TG": -1.45, "TT": -1.00,
-}
-PERIODICITY_MIN_LENGTH = 40  # sotto questa lunghezza l'autocorrelazione a lag 10 e' troppo rumorosa
 
 
 def extract_fasta_id(header_line):
@@ -242,85 +216,19 @@ def tandem_repeat_fraction(sequence, max_unit=TANDEM_REPEAT_MAX_UNIT, min_copies
     return covered / n
 
 
-def nearest_neighbor_stability(sequence):
-    """nn_stability_mean, nn_stability_std: stabilita' termodinamica del duplex
-    di DNA dal modello nearest-neighbor (energia libera ΔG, tabella NN_DELTA_G).
-
-    A differenza di gc_content, che guarda solo QUANTE G/C ci sono, questo
-    guarda QUALI basi sono adiacenti: la forza con cui i due filamenti legano
-    dipende dalla coppia di passi (es. un passo GC lega molto piu' di un passo
-    TA anche a parita' di contenuto GC complessivo). E' una proprieta' fisica
-    misurata sperimentalmente, non una statistica di conteggio.
-
-    Si scorre la sequenza a coppie consecutive, si somma il ΔG di ogni passo e
-    si ritorna (media, deviazione standard) dei ΔG per passo:
-    - media: stabilita' complessiva del duplex (piu' negativa = piu' stabile).
-      E' una media per passo, quindi indipendente dalla lunghezza.
-    - std: quanto la stabilita' e' omogenea o "a chiazze" lungo la molecola,
-      un asse di eterogeneita' fisica basato sull'energia di legame e non sulla
-      sola composizione delle basi.
-    Ritorna (0.0, 0.0) per sequenze troppo corte per almeno un passo.
-    """
-    valori = [NN_DELTA_G[sequence[i:i + 2]] for i in range(len(sequence) - 1)
-              if sequence[i:i + 2] in NN_DELTA_G]
-    if not valori:
-        return 0.0, 0.0
-    media = sum(valori) / len(valori)
-    std = statistics.pstdev(valori) if len(valori) >= 2 else 0.0
-    return media, std
-
-
-def _autocorrelation_at_lag(signal, lag):
-    """Autocorrelazione (coefficiente di Pearson) di un segnale numerico con
-    se stesso spostato di 'lag' posizioni. Misura quanto la sequenza si
-    'assomiglia' a distanza fissa: valori alti = periodicita' a quel passo."""
-    n = len(signal)
-    if n <= lag + 1:
-        return 0.0
-    x = signal[:n - lag]
-    y = signal[lag:]
-    mx, my = x.mean(), y.mean()
-    denom = math.sqrt(((x - mx) ** 2).sum() * ((y - my) ** 2).sum())
-    if denom == 0:
-        return 0.0
-    return float(((x - mx) * (y - my)).sum() / denom)
-
-
-def sequence_periodicity(sequence):
-    """periodicity_3bp, periodicity_10bp: forza della periodicita' della
-    sequenza a passo 3 e a passo 10 basi, via autocorrelazione.
-
-    Biologia: le regioni codificanti hanno una periodicita' di 3 basi (i
-    codoni); il DNA avvolto sui nucleosomi mostra una periodicita' di ~10 basi
-    nei dinucleotidi A/T. Sono impronte di come la sequenza e' usata nella
-    cellula, non catturate da entropia/composizione (che sono 'senza scala').
-
-    Statistica: la sequenza viene codificata come segnale binario W/S
-    (A o T = 1, G o C = 0) e se ne calcola l'autocorrelazione a lag 3 e lag 10.
-    E' un coefficiente in [-1, 1], indipendente dalla lunghezza. Ritorna
-    (0.0, 0.0) per sequenze piu' corte di PERIODICITY_MIN_LENGTH (a lag 10 il
-    segnale sarebbe troppo rumoroso per essere affidabile).
-    """
-    n = len(sequence)
-    if n < PERIODICITY_MIN_LENGTH:
-        return 0.0, 0.0
-    signal = np.fromiter((1.0 if b in "AT" else 0.0 for b in sequence), dtype=np.float64, count=n)
-    return _autocorrelation_at_lag(signal, 3), _autocorrelation_at_lag(signal, 10)
-
-
 def compute_sequence_descriptors(sequence):
-    """Calcola i 14 descrittori biologici/statistici per una sequenza.
+    """Calcola i 10 descrittori biologici/statistici per una sequenza.
 
     Ritorna un dict con le chiavi in DESCRIPTOR_NAMES. La sequenza deve
     essere gia' filtrata a monte (niente 'N', lunghezza minima >= 3): qui
     non viene rifatto quel controllo per evitare di duplicare la logica di
     filtro tra descriptor_extractor.py e descriptor_understanding*.py.
 
-    Tutti i valori sono rapporti/frazioni/differenze normalizzate/medie per
-    passo (mai conteggi grezzi), cosi' da non dipendere dalla lunghezza
-    assoluta della sequenza ne' dal metodo di sequenziamento che l'ha prodotta
-    - vedi descriptor_understanding_by_disease.py per la verifica empirica di
-    questa proprieta' (AUC length-matched/method-matched/method+length-matched).
+    Tutti i valori sono rapporti/frazioni/differenze normalizzate (mai conteggi
+    grezzi), cosi' da non dipendere dalla lunghezza assoluta della sequenza ne'
+    dal metodo di sequenziamento che l'ha prodotta - vedi
+    descriptor_understanding_by_disease.py per la verifica empirica di questa
+    proprieta' (AUC length-matched/method-matched/method+length-matched).
     """
     lunghezza = len(sequence)
     base_counts = Counter(sequence)
@@ -332,8 +240,6 @@ def compute_sequence_descriptors(sequence):
     h3 = _entropy_bits_from_counts(tri_counts, tri_total)
 
     gc_skew, at_skew = gc_at_skew(base_counts)
-    nn_stability_mean, nn_stability_std = nearest_neighbor_stability(sequence)
-    periodicity_3bp, periodicity_10bp = sequence_periodicity(sequence)
 
     return {
         "gc_content": gc_content(base_counts, lunghezza),
@@ -346,10 +252,6 @@ def compute_sequence_descriptors(sequence):
         "entropy_tri": h3 / 6,
         "cond_entropy_1": (h2 - h1) / 2,
         "cond_entropy_2": (h3 - h2) / 2,
-        "nn_stability_mean": nn_stability_mean,
-        "nn_stability_std": nn_stability_std,
-        "periodicity_3bp": periodicity_3bp,
-        "periodicity_10bp": periodicity_10bp,
     }
 
 

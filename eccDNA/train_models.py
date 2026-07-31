@@ -1,13 +1,13 @@
 """Confronto di 6 modelli sul classificatore binario sano/malato (0/1,
-indipendente dalla malattia specifica), sui 14 descrittori biologici/statistici.
+indipendente dalla malattia specifica), sui 10 descrittori biologici/statistici.
 
 Modelli (2 di machine learning classico, 4 reti neurali PyTorch):
 - Random Forest (sklearn): ensemble ad alberi parallelo (bagging).
 - Gradient Boosting (sklearn HistGradientBoostingClassifier): ensemble ad
   alberi sequenziale (boosting).
-- MLP profondo (PyTorch): classificatore feed-forward diretto (14->64->32->16->1).
+- MLP profondo (PyTorch): classificatore feed-forward diretto (10->64->32->16->1).
 - MLP con self-attention sui descrittori (PyTorch): come l'MLP ma con un gate
-  appreso che pesa le 14 feature per campione prima della rete.
+  appreso che pesa le 10 feature per campione prima della rete.
 - Rete siamese, metric learning puro (PyTorch): embedding appreso con triplet
   loss batch-hard su 18 classi (17 malattie + sano) e classificazione per
   prototipo piu' vicino (centroide sano vs centroide di malattia).
@@ -32,30 +32,34 @@ su 17 malattie con segnale robusto. Metrica principale: ROC-AUC (indipendente
 dalla soglia). Test set (10.696 sequenze), ordinati per ROC-AUC:
 
     Modello                      ROC-AUC  Accuracy  Precision  Recall   F1
-    MLP con attenzione            0.789     0.716     0.686    0.798   0.738
-    Siamese (loss combinata)      0.784     0.704     0.666    0.821   0.735
-    MLP profondo                  0.784     0.707     0.669    0.820   0.737
-    Gradient Boosting             0.770     0.695     0.662    0.794   0.722
-    Random Forest                 0.769     0.691     0.637    0.888   0.742
-    Siamese (metric learning)     0.512     0.504     0.502    0.883   0.640
+    MLP con attenzione            0.779     0.706     0.675    0.795   0.730
+    MLP profondo                  0.778     0.704     0.669    0.809   0.732
+    Siamese (loss combinata)      0.776     0.706     0.680    0.777   0.725
+    Gradient Boosting             0.769     0.699     0.667    0.794   0.725
+    Random Forest                 0.758     0.680     0.632    0.859   0.728
+    Siamese (metric learning)     0.545     0.527     0.517    0.824   0.636
 
 Letture principali:
 - I 4 approcci discriminativi (2 MLP, GBM, RF) piu' la siamese a loss combinata
-  si raggruppano entro ~2 punti di AUC (0.769-0.789): con 14 feature tabellari
+  si raggruppano entro ~2 punti di AUC (0.758-0.779): con poche feature tabellari
   la complessita' del modello conta poco, il tetto lo danno i descrittori.
 - L'MLP con attenzione e' primo, ma per un margine minimo sull'MLP profondo.
-- Random Forest e' il piu' "prudente" (recall 0.888, ma piu' falsi positivi).
-- La siamese a METRIC LEARNING PURO fallisce (0.512, quasi caso): il paradigma
-  contrastivo non si adatta a 14 feature scalari con classi molto sovrapposte.
-  La variante a loss combinata raggiunge 0.784 solo perche', col peso della
-  triplet a 0.05, e' di fatto un MLP (verifica: peso 0.0->0.779, 0.05->0.783,
-  0.2->0.611, 0.5->0.605 - la componente contrastiva, se conta, peggiora).
+- Random Forest e' il piu' "prudente" (recall alta, ma piu' falsi positivi).
+- La siamese a METRIC LEARNING PURO fallisce (0.545, quasi caso): il paradigma
+  contrastivo non si adatta a poche feature scalari con classi molto sovrapposte.
+  La variante a loss combinata raggiunge ~0.78 solo perche', col peso della
+  triplet a 0.05, e' di fatto un MLP (la componente contrastiva, se conta, peggiora).
 
-L'AUC ~0.79 e' piu' bassa di un ipotetico ~0.9 perche' e' onesta: sopravvive al
+SET DA 14 A 10 DESCRITTORI: un'ablation ha rimosso termodinamica
+(nn_stability_mean/std) e periodicita' (periodicity_3bp/10bp) - nn_stability_mean
+era correlato 0.99 con gc_content, e togliendo tutte e 4 l'AUC calava solo di
+~0.004-0.011 (entro il rumore). Set finale piu' essenziale a parita' di prestazioni.
+
+L'AUC ~0.78 e' piu' bassa di un ipotetico ~0.9 perche' e' onesta: sopravvive al
 controllo dei confondenti lunghezza+metodo e allo split per cluster genomico.
 Output completo salvato in data/processed/model_comparison_results.tsv e
-model_comparison_per_disease.tsv. (Run: 2026-07-24, ambiente ecc_Dna_hotspot,
-PyTorch 2.13 CPU, seed 42.)
+model_comparison_per_disease.tsv. (Ambiente ecc_Dna_hotspot, PyTorch 2.13 CPU,
+seed 42; le reti neurali hanno una variabilita' run-to-run di ~+/-0.005.)
 ===========================================================================
 """
 
