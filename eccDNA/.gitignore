@@ -1,0 +1,11 @@
+# Dati grezzi e generati: troppo grandi per git (FASTA ~6.5 GB, metadati ~1.3 GB),
+# vanno collocati manualmente in data/ prima di eseguire gli script (vedi README).
+data/
+
+# File della tesi: sorgente LaTeX, PDF e ausiliari di compilazione
+# (.tex .pdf .aux .log .out .toc .bbl .synctex.gz ...)
+tesi_descrittori_validazione.*
+
+# Cache Python (rigenerata automaticamente)
+__pycache__/
+*.pyc

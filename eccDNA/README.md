@@ -1,130 +1,104 @@
-# eccDNA — descrittori di sequenza e classificazione sano/malato
+# eccDNA — identificare la malattia dalla sequenza
 
-L'obiettivo è capire se una sequenza di eccDNA (extrachromosomal circular DNA)
-possa essere classificata come **sana o associata a malattia** a partire solo da
-descrittori biologici/statistici estraibili dalla sequenza stessa — senza usare
-come feature confondenti tecnici (lunghezza, metodo di sequenziamento) e
-indipendentemente dalla malattia specifica. La pipeline va dai metadati grezzi
-alla scoperta, malattia per malattia, di quali descrittori portano segnale reale,
-fino al confronto di sei modelli di classificazione.
+L'obiettivo è capire se, a partire **esclusivamente dalla sequenza** di una
+molecola di eccDNA (extrachromosomal circular DNA), sia possibile identificare la
+malattia. La domanda è affrontata in due fasi:
 
-Per la descrizione del dataset grezzo (colonne, split, note sui valori mancanti)
-vedi `../README_disease_detection.md`, scritto dal tutor.
+1. **Classificazione binaria** sano/malato — con dieci descrittori biologici della
+   sequenza, scelti per fondatezza biologica e validati contro i confondenti;
+2. **Classificazione multiclasse** del tipo di malattia (tessuto), condotta sotto
+   controllo severo dei confondenti.
+
+Il filo conduttore metodologico è il **controllo dei confondenti** (lunghezza,
+metodo di sequenziamento, studio di origine): nel dataset grezzo l'etichetta di
+malattia è quasi allineata a queste variabili tecniche, e separare le malattie
+senza controlli significa in gran parte riconoscere il *batch*, non la biologia.
+
+Il documento di tesi (`tesi_descrittori_validazione.tex` → PDF, ignorato da git)
+raccoglie l'intero lavoro: abstract → descrittori → confondenti → binario →
+multiclasse → conclusioni.
+
+Per la descrizione del dataset grezzo (colonne, split, valori mancanti) vedi
+`../README_disease_detection.md`, scritto dal tutor.
 
 ## 1. Setup ambiente
 
 ```powershell
 conda activate ecc_Dna_hotspot
 pip install -r requirements.txt
-# torch va installato dall'indice CPU dedicato (niente CUDA su questa macchina):
+# torch dall'indice CPU (niente CUDA su questa macchina):
 pip install torch --index-url https://download.pytorch.org/whl/cpu
 ```
 
-`requirements.txt`: `pandas`, `numpy`, `scikit-learn`, `torch` (CPU).
+`requirements.txt`: `pandas`, `numpy`, `scikit-learn`, `scipy`, `torch` (CPU).
 
 ## 2. Dati necessari (non su git)
 
-I file grezzi sono troppo grandi per essere versionati (vedi `.gitignore`).
-Vanno messi in `data/processed/` prima di eseguire qualunque script:
+I file grezzi sono troppo grandi per essere versionati. Vanno messi in
+`data/processed/` prima di eseguire qualunque script:
 
 ```text
-data/processed/eccdna_disease_detection_metadata.tsv
-data/processed/eccdna_disease_detection.body.fa
+data/processed/eccdna_disease_detection_metadata.tsv   (metadati completi, ~1.3 GB)
+data/processed/eccdna_disease_detection.body.fa        (sequenze, ~6.5 GB)
 ```
 
 `eccdna_metadata_CLEAN.tsv`, `eccdna_descriptor_features.tsv`,
 `eccdna_disease_pairing.tsv` e i TSV dei risultati vengono generati dagli script.
 
-## 3. Pipeline, in ordine
-
-**Flusso dei dati** (dove e quando la sequenza diventa 10 numeri):
+## 3. Flusso dei dati (dove la sequenza diventa numeri)
 
 ```text
-SEQUENZE GREZZE (lettere ACGT)
-  eccdna_disease_detection.body.fa
-        │
-        ▼   descriptor_extractor.py  →  chiama  eccdna_utils.compute_sequence_descriptors()
-CALCOLO DEI 10 DESCRITTORI          (qui, UNA VOLTA SOLA, prima di ogni addestramento)
-        │
+SEQUENZE GREZZE (lettere ACGT)  →  eccdna_disease_detection.body.fa
+        │  descriptor_extractor.py → eccdna_utils.compute_sequence_descriptors()
         ▼
-NUMERI GIA' PRONTI SU FILE
-  eccdna_descriptor_features.tsv   (una riga per sequenza: id + 10 numeri)
-        │
-        ▼   training_data.build_balanced_splits()
-DATASET BILANCIATO  =  10 colonne X  +  y (0/1)
-        │
-        ▼   train_models.py
-ADDESTRAMENTO E CONFRONTO DEI MODELLI
-  (il modello legge solo i numeri, mai le lettere ACGT)
+10 DESCRITTORI su file  →  eccdna_descriptor_features.tsv  (id + 10 numeri per sequenza)
+        │  training_data.build_balanced_splits()   /   gold_standard_data (multiclasse)
+        ▼
+DATASET (X = numeri, y = etichetta)  →  train_models.py (binario) / experiment_goldstandard.py (multiclasse)
 ```
 
-Da qui in poi la sequenza originale non serve più: i modelli lavorano solo sui
-10 numeri gia' calcolati e salvati.
-
-| # | Comando | Cosa produce |
-|---|---|---|
-| 1 | `python dataUnderstanding.py` | Solo diagnostica: EDA + rilevamento data leakage sui metadati grezzi (non genera file) |
-| 2 | `python dataCleaning.py` | `eccdna_metadata_CLEAN.tsv` (metadati puliti, senza le colonne che causano leakage) |
-| 3 | `python descriptor_understanding_by_disease.py --diseases "..."` | Solo diagnostica: per i sottotipi indicati, calcola i descrittori su un campione e verifica quali sono informativi controllando i confondenti lunghezza e metodo (importanza RandomForest + AUC univariata per descrittore); non genera file |
-| 4 | `python descriptor_extractor.py` | `eccdna_descriptor_features.tsv` (i 10 descrittori estratti per le 17 malattie con segnale confermato) + `eccdna_disease_pairing.tsv` (abbinamento malattia↔id, necessario perché il pool sano è condiviso tra malattie) |
-| 5 | `python train_models.py` | Costruisce il dataset bilanciato (`training_data.py`), allena e confronta i 6 modelli (`models_pytorch.py`), salva `model_comparison_results.tsv` e `model_comparison_per_disease.tsv` |
+Il modello legge solo i numeri, mai le lettere ACGT. La malattia specifica non è
+mai una feature: è mascherata in addestramento e usata solo per l'analisi.
 
 ## 4. I 10 descrittori
 
-Definiti in `eccdna_utils.compute_sequence_descriptors`. Sono tutti rapporti o
-frazioni (mai conteggi grezzi), quindi indipendenti per costruzione dalla
-lunghezza assoluta. Quattro famiglie:
+Definiti in `eccdna_utils.compute_sequence_descriptors`. Tutti rapporti o frazioni
+(mai conteggi grezzi), quindi indipendenti per costruzione dalla lunghezza. Quattro
+famiglie:
 
 - **Composizione / skew**: `gc_content`, `gc_skew`, `at_skew`, `purine_pyrimidine_skew`
 - **Bias a coppie di basi**: `cpg_oe`, `dinuc_signature_dist`
 - **Ripetizioni**: `tandem_repeat_fraction`
 - **Entropia / complessità**: `entropy_tri`, `cond_entropy_1`, `cond_entropy_2`
 
-**Percorso di selezione** (da 18 candidati a 10):
-1. Da 18 candidati, il controllo combinato lunghezza+metodo scarta 4 descrittori
-   deboli: `lz_complexity` (dipendeva dal metodo via cutoff di lunghezza),
-   `gc_window_std` e `entropy_tri_window_std` (AUC univariata alta grezza ma ~0.02
-   method+length-matched: catturavano la lunghezza), `palindrome_density` e
-   `g4_fraction` (G-quadruplex) → **14 descrittori**.
-2. Un'ablation rimuove anche **termodinamica** (`nn_stability_mean/std`) e
-   **periodicità** (`periodicity_3bp/10bp`): `nn_stability_mean` era correlato
-   **0.99 con `gc_content`** (contenuto di GC travestito), e togliendo tutte e 4
-   l'AUC del modello calava solo di ~0.004–0.011 (entro il rumore) → **10
-   descrittori**, più essenziali a parità di prestazioni.
+**Selezione (da 18 candidati a 10):** il controllo combinato lunghezza+metodo
+scarta i descrittori deboli o confondenti (es. `lz_complexity`, `g4_fraction`,
+`palindrome_density`, le eterogeneità a finestre); una successiva ablation rimuove
+termodinamica e periodicità (`nn_stability_mean` correlava 0.99 con `gc_content`).
+Restano i 10 essenziali, a parità di prestazioni.
 
-**Due confondenti** da controllare prima di fidarsi di qualunque segnale:
-- `length` (già noto, per questo escluso da `dataCleaning.py`)
-- `method` / `source_db` / `library_type` (il protocollo di sequenziamento: alcune
-  malattie sono ~100% WGS mentre il pool sano è quasi 0% WGS; senza controllo un
-  modello imparerebbe il protocollo, non la malattia).
+## 5. Il controllo dei confondenti
 
-`descriptor_understanding_by_disease.py` costruisce il pool sano su misura per
-ciascun sottotipo, bilanciato per metodo, e verifica a valle con AUC
-"length-matched", "method-matched" e "method+length-matched" (il più severo).
-Sulle 67 malattie del dataset, 41 hanno abbastanza malati da testare, 31 hanno un
-sano compatibile per metodo, e **17 mostrano un segnale robusto** che sopravvive
-al controllo combinato (le altre sono quasi interamente spiegate da length/method
-— es. Melanoma: AUC 0.88 grezzo → 0.58 dopo il controllo doppio, un artefatto).
+È il fondamento di tutto il lavoro. Due script diagnosticano il dataset completo:
 
-## 5. Dataset bilanciato per il training
+| Comando | Cosa mostra |
+|---|---|
+| `python diagnose_dataset.py` | Diagnostica completa sui ~3.75 M record: valori mancanti, bilanciamento (73 etichette, il tumore gastrico è ~77% dei malati, rapporto max/min > 10⁶), **purezza per malattia** (metodo ~0.91, database ~0.96, tessuto ~0.86 → la malattia è quasi un alias del protocollo/studio), confondente lunghezza, verifica leakage (assente) |
+| `python explore_full_dataset.py` | Profilo per malattia: metodo/tessuto/studio dominante e relativa purezza; salva `full_dataset_disease_profile.tsv` |
 
-`training_data.build_balanced_splits` ricostruisce train/val/test dal file di
-abbinamento in modo **equo e method-safe**:
-- **50/50 sano/malato** esatto, per ogni malattia (non un 50/50 globale casuale);
-- **method-matching preservato**: per ogni malattia i sani hanno la stessa
-  distribuzione di metodo dei malati (entro ~1%), perché bilanciare "a caso"
-  reintrodurrebbe il confondente (tipo-malattia e metodo sono correlati);
-- **dominio dei tumori GI attenuato** con un tetto di 3.000 sequenze per malattia.
+A livello di **descrittore**, `descriptor_understanding_by_disease.py` costruisce
+per ogni sottotipo un pool sano appaiato per metodo e verifica il segnale con AUC
+"length-matched", "method-matched" e "method+length-matched" (il più severo): solo
+i descrittori (e le malattie) il cui segnale sopravvive vengono tenuti.
 
-Risultato: train 62.090, val 21.712, test 10.696 sequenze, tutti 50/50, su 17
-malattie. Split per `split_cluster` (cluster genomico), non casuale, per non
-sovrastimare le performance. Standardizzazione con media/std calcolate solo sul
-train. La colonna `disease` non è mai una feature del modello.
+## 6. Task binario: sano/malato
 
-## 6. Risultati dei modelli
+**Dataset** (`training_data.build_balanced_splits`): 50/50 sano/malato per ogni
+malattia, con i sani appaiati per metodo ai malati (bilanciare "a caso"
+reintrodurrebbe il confondente), tetto di 3.000 sequenze per malattia. Split per
+cluster genomico (non casuale). Test: 10.696 sequenze, 17 malattie robuste.
 
-Sei modelli (2 ML classico, 4 reti neurali PyTorch) sul test set bilanciato
-(10.696 sequenze), ordinati per ROC-AUC:
+**Risultati** (`train_models.py`, test bilanciato, ordinati per ROC-AUC):
 
 | Modello | ROC-AUC | Accuracy | Precision | Recall | F1 |
 |---|---|---|---|---|---|
@@ -135,35 +109,73 @@ Sei modelli (2 ML classico, 4 reti neurali PyTorch) sul test set bilanciato
 | Random Forest | 0.758 | 0.680 | 0.632 | 0.859 | 0.728 |
 | Siamese (metric learning) | 0.545 | 0.527 | 0.517 | 0.824 | 0.636 |
 
-- I 4 approcci discriminativi (2 MLP, GBM, RF) più la siamese a loss combinata si
-  raggruppano entro ~2 punti di AUC: con poche feature tabellari la complessità del
-  modello conta poco, il tetto lo danno i descrittori.
-- La siamese a **metric learning puro** fallisce (0.545, quasi caso): il paradigma
-  contrastivo non si adatta a poche feature scalari con classi molto sovrapposte.
-  La variante a loss combinata arriva a ~0.78 solo perché, col peso della triplet
-  ridotto a 0.05, è di fatto un MLP.
-- L'AUC ~0.78 è più bassa di un ipotetico ~0.9 perché è **onesta**: sopravvive al
-  controllo dei confondenti e allo split per cluster genomico.
+Con poche feature scalari la complessità del modello conta poco: il tetto lo danno
+i descrittori. La siamese a metric learning puro fallisce (quasi caso). L'AUC ~0.78
+è **onesta** perché sopravvive ai controlli. Intervalli di confidenza al 95%
+(bootstrap) dell'ordine di ±0.01, che escludono 0.5 (es. GBM 0.769 [0.760, 0.778])
+→ significativa (vedi §8).
 
-Il riepilogo completo è anche nella docstring di `train_models.py`.
+## 7. Task multiclasse: quale tessuto
 
-## 7. File principali
+**Idea:** classificare *quale* malattia (tessuto), non solo sano/malato. Poiché qui
+i confondenti dominano, si lavora sotto controlli severi.
 
 | File | Ruolo |
 |---|---|
-| `dataUnderstanding.py` | EDA + rilevamento data leakage sui metadati grezzi |
-| `dataCleaning.py` | Pulizia metadati grezzi → `eccdna_metadata_CLEAN.tsv` |
-| `eccdna_utils.py` | Funzioni condivise: parsing FASTA, calcolo dei 10 descrittori |
-| `descriptor_understanding_by_disease.py` | Scoperta dei descrittori per sottotipo, con controllo dei confondenti lunghezza/metodo |
-| `descriptor_extractor.py` | Estrazione dei 10 descrittori per le malattie con segnale confermato (produzione) |
-| `training_data.py` | Assemblaggio del dataset bilanciato (50/50, method-matched per malattia) |
-| `models_pytorch.py` | Architetture PyTorch: MLP, MLP con attenzione, siamese (metric learning e loss combinata) |
-| `train_models.py` | Allena e confronta i 6 modelli, salva i risultati |
+| `gold_standard_data.py` | Costruisce il dataset "gold-standard" confounder-controlled: **unico strato** (database CircleBaseV2 + protocollo Circle-seq → metodo e studio costanti), igiene etichette (doppioni fusi per tessuto), **appaiamento per lunghezza**, split per cluster; include la diagnostica lunghezza |
+| `multiclass_data.py` | Dataset multiclasse per la variante a 17 malattie (split per cluster, con riparazione delle classi rare) |
+| `train_multiclass.py` | Modelli: reti **prototipiche** (siamese) con distanza euclidea/coseno/triplet + baseline **softmax**, con addestramento e selezione bilanciati |
+| `train_siamese_multiclass.py` | Modello siamese consolidato su rappresentazione ricca (spettro 3-mer + descrittori) |
+| `experiment_goldstandard.py` | Binario e multiclasse dentro lo strato pulito, con baseline solo-lunghezza |
 
-## 8. Bibliografia
+**Risultati** (gold-standard, 5 tessuti, length-matched; caso = 0.20):
 
-Paper di riferimento consultati per la scelta dei descrittori e per il contesto
-sull'eccDNA (i PDF restano solo in locale in `Paper/`, non su git):
+| Modello | Accuracy | Acc. bilanciata | macro-F1 |
+|---|---|---|---|
+| Softmax bilanciato | 0.416 | 0.406 | 0.409 |
+| Siamese (prototipica) | 0.400 | 0.394 | 0.381 |
+| Baseline solo-lunghezza | 0.232 | — | — |
+
+Prestazioni **per tessuto** (siamese): si riconoscono bene i tessuti più distinti —
+Colon-retto (F1 ≈ 0.51) e Cataratta (F1 ≈ 0.48, unica condizione non tumorale) —
+mentre i tumori epiteliali affini (Ipofaringe, Prostata, Stomaco) restano deboli
+(F1 ≈ 0.22–0.37). Il segnale è **reale ma modesto** (~2× il caso), la siamese non
+supera il softmax, e senza controlli l'accuratezza apparente sarebbe più alta ma
+in gran parte *batch*.
+
+## 8. Robustezza statistica
+
+`python statistical_robustness.py` verifica che i risultati non siano frutto del
+caso:
+
+- **Binario** — bootstrap sul test (2000 ricampionamenti): ROC-AUC con IC 95%
+  dell'ordine di ±0.01, che esclude 0.5 (es. GBM 0.769 [0.760, 0.778]) → segnale
+  significativo.
+- **Multiclasse** — 10 ricampionamenti indipendenti: accuratezza 0.40–0.42 (IC 95%
+  [0.39, 0.43]), stabile. **Test di permutazione**: rimescolando le etichette il
+  modello scende a 0.20 (il caso), contro 0.40 con le etichette vere; **p = 0.001**
+  → altamente significativo rispetto al caso.
+
+## 9. File del progetto
+
+**Dati e descrittori:** `eccdna_utils.py` (calcolo dei 10 descrittori, parsing
+FASTA), `dataUnderstanding.py` (EDA/leakage grezzo), `dataCleaning.py` (metadati
+puliti), `descriptor_understanding_by_disease.py` (validazione descrittori per
+sottotipo), `descriptor_extractor.py` (estrazione descrittori), `training_data.py`
+(dataset binario bilanciato).
+
+**Confondenti (dataset completo):** `diagnose_dataset.py`, `explore_full_dataset.py`.
+
+**Binario:** `models_pytorch.py` (architetture), `train_models.py` (6 modelli).
+
+**Multiclasse:** `gold_standard_data.py`, `multiclass_data.py`, `train_multiclass.py`,
+`train_siamese_multiclass.py`, `experiment_goldstandard.py`.
+
+**Robustezza:** `statistical_robustness.py` (IC 95% + test di permutazione).
+
+**Tesi:** `tesi_descrittori_validazione.tex` (+ PDF, ignorati da git).
+
+## 10. Bibliografia
 
 - Wang C. et al., "DeepECC: a deep learning framework for genome-wide
   identification and analysis of human cancer eccDNAs", *Nucleic Acids Research*,
