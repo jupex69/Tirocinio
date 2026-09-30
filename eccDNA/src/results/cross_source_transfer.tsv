@@ -1,0 +1,5 @@
+direzione	modello	within_source_acc	transfer_acc	transfer_bal_acc	transfer_macroF1	transfer_x_chance	gap_batch
+eccDNABase->CircleBaseV2	Prototipico coseno	0.36	0.189	0.189	0.177	1.14	0.17
+eccDNABase->CircleBaseV2	Softmax bilanciato	0.355	0.183	0.183	0.163	1.1	0.172
+CircleBaseV2->eccDNABase	Prototipico coseno	0.311	0.168	0.168	0.167	1.01	0.143
+CircleBaseV2->eccDNABase	Softmax bilanciato	0.319	0.169	0.169	0.168	1.01	0.15

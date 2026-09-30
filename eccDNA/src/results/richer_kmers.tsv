@@ -1,0 +1,5 @@
+set	within_acc	within_F1	within_xcaso	cross_acc	cross_F1	cross_xcaso
+A: 10 descrittori	0.236	0.237	2.12	0.231	0.224	2.08
+B: +3-mer (74)	0.296	0.297	2.67	0.22	0.213	1.98
+C: +4-mer (330)	0.276	0.276	2.48	0.232	0.219	2.08
+D: +5-mer (1354)	0.323	0.316	2.91	0.216	0.203	1.94

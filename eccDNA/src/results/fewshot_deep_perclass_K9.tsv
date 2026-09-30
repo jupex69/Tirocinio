@@ -1,0 +1,10 @@
+malattia	recall_eccDNA2Circle	recall_Circle2eccDNA	media
+Breast Cancer	0.469	0.345	0.407
+Primary Pulmonary Hypertension	0.43	0.29	0.36
+Dilated Cardiomyopathy	0.208	0.18	0.194
+Glioblastoma	0.106	0.188	0.147
+Hypopharynx Cancer	0.161	0.131	0.146
+Stomach Cancer	0.146	0.133	0.14
+Ovarian Cancer	0.095	0.073	0.084
+Prostate Cancer	0.087	0.048	0.068
+Colorectal Cancer	0.021	0.028	0.024

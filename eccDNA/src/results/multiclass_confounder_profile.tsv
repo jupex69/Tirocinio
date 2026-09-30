@@ -1,0 +1,18 @@
+disease	n	method_top	method_pur	n_method	source_db_top	source_db_pur	n_source_db	sample_top	sample_pur	n_sample	train_n	recall_1shot
+Systemic lupus erythematosus	153	Circle_seq	0.503	2	CircleBaseV2	0.503	2	NA	1.0	1	107	0.849
+Caid syndrome	202	ATAC-seq	1.0	1	eccDNABase	1.0	1	NA	1.0	1	137	0.299
+Primary pulmonary hypertension	8119	Circle_seq	0.501	2	CircleBaseV2	0.501	2	NA	1.0	1	3000	0.285
+Breast cancer	828	WGS	0.347	5	eccDNABase	0.79	2	NA	1.0	1	577	0.167
+Colorectal cancer	20000	Circle_seq	0.98	5	CircleBaseV2	0.98	2	NA	1.0	1	3000	0.153
+Gastric cancer	20000	Circle_seq	1.0	1	CircleBaseV2	1.0	1	NA	1.0	1	3000	0.151
+Chronic kidney disease	2185	Circle-Seq	1.0	1	eccDNABase	1.0	1	NA	1.0	1	1859	0.13
+Colorectal adenoma	1803	Circle-seq	1.0	1	eccDNABase	1.0	1	NA	1.0	1	1546	0.13
+Cataract	8021	Circle_seq	1.0	1	CircleBaseV2	1.0	1	NA	1.0	1	3000	0.127
+Coronary artery disease	560	ATAC-seq	1.0	1	eccDNABase	1.0	1	NA	1.0	1	388	0.107
+Dilated cardiomyopathy	3028	Circle_seq	0.5	2	CircleBaseV2	0.5	2	NA	1.0	1	2601	0.104
+Hypopharynx cancer	2450	Circle-Seq	1.0	1	eccDNABase	1.0	1	NA	1.0	1	2111	0.102
+Stomach	20000	Circle_seq	1.0	1	CircleBaseV2	1.0	1	NA	1.0	1	3000	0.102
+Glioblastoma cancer	803	Circle_seq	1.0	1	CircleBaseV2	1.0	1	NA	1.0	1	563	0.097
+Hypopharyngeal squamous cell carcinoma	5925	Circle_seq	1.0	1	CircleBaseV2	1.0	1	NA	1.0	1	3000	0.089
+Liver cancer	155	ATAC-seq	0.626	3	eccDNABase	1.0	1	NA	1.0	1	109	0.086
+Stomach cancer	20000	Circle-seq	0.995	4	eccDNABase	1.0	1	NA	1.0	1	3000	0.076

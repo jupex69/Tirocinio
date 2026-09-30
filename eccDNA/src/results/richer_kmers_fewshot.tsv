@@ -1,0 +1,10 @@
+set	loss	one_shot	one_xcaso	few_shot_K5	few_xcaso
+A: 10 descrittori	euclideo	0.111	1.0	0.115	1.04
+A: 10 descrittori	coseno	0.112	1.01	0.113	1.02
+A: 10 descrittori	triplet	0.113	1.02	0.123	1.11
+B: +3-mer (74)	euclideo	0.113	1.02	0.125	1.13
+B: +3-mer (74)	coseno	0.115	1.04	0.122	1.1
+B: +3-mer (74)	triplet	0.114	1.03	0.122	1.1
+C: +4-mer (330)	euclideo	0.114	1.03	0.122	1.1
+C: +4-mer (330)	coseno	0.136	1.22	0.144	1.29
+C: +4-mer (330)	triplet	0.115	1.03	0.129	1.16

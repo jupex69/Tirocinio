@@ -1,0 +1,35 @@
+malattia	train_n	k_shot	recall
+Systemic lupus erythematosus	107	1	0.849
+Liver cancer	109	1	0.086
+Caid syndrome	137	1	0.299
+Coronary artery disease	388	1	0.107
+Glioblastoma cancer	563	1	0.097
+Breast cancer	577	1	0.167
+Colorectal adenoma	1546	1	0.13
+Chronic kidney disease	1859	1	0.13
+Hypopharynx cancer	2111	1	0.102
+Dilated cardiomyopathy	2601	1	0.104
+Cataract	3000	1	0.127
+Colorectal cancer	3000	1	0.153
+Gastric cancer	3000	1	0.151
+Hypopharyngeal squamous cell carcinoma	3000	1	0.089
+Primary pulmonary hypertension	3000	1	0.285
+Stomach	3000	1	0.102
+Stomach cancer	3000	1	0.076
+Systemic lupus erythematosus	107	5	0.87
+Liver cancer	109	5	0.164
+Caid syndrome	137	5	0.442
+Coronary artery disease	388	5	0.034
+Glioblastoma cancer	563	5	0.114
+Breast cancer	577	5	0.206
+Colorectal adenoma	1546	5	0.262
+Chronic kidney disease	1859	5	0.26
+Hypopharynx cancer	2111	5	0.086
+Dilated cardiomyopathy	2601	5	0.091
+Cataract	3000	5	0.121
+Colorectal cancer	3000	5	0.164
+Gastric cancer	3000	5	0.208
+Hypopharyngeal squamous cell carcinoma	3000	5	0.081
+Primary pulmonary hypertension	3000	5	0.522
+Stomach	3000	5	0.115
+Stomach cancer	3000	5	0.095

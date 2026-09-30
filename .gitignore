@@ -1,12 +1,15 @@
 da farsi.txt
 README_disease_detection.zip
-eccDNA/data/processed/*.fa
-eccDNA/data/processed/*.tsv
-eccDNA/eda_plots/01_class_distribution.png
-eccDNA/eda_plots/02_gc_distribution.png
-eccDNA/eda_plots/03_length_distribution.png
-eccDNA/eda_plots/04_chromosome_distribution.png
-eccDNA/eda_plots/04_feature_importanza.png
+# dati grezzi/generati (spostati in eccDNA/src/data/): troppo grandi per git
+eccDNA/src/data/
+# documenti personali del tirocinio: non vanno pubblicati
+Modulo-avvio-progetto-formativo-interno.docx
+Tirocinio interno*.docx
+registro-tirocinio*.xls
+# tesi e relazione: restano in locale
+eccDNA/tesi_Annunziata_Giuseppe.*
+eccDNA/relazione_tirocinio.*
+eccDNA/logoUnisa.png
 
 # bytecode compilato, mai utile da versionare
 __pycache__/

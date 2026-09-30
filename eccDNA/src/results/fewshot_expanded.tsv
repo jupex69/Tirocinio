@@ -1,0 +1,7 @@
+direzione	n_classi	shot	regime	acc	IC95	caso	x_caso
+eccDNA->Circle	10	1	one-shot	0.124	[0.050,0.212]	0.1	1.24
+eccDNA->Circle	10	5	5-shot	0.148	[0.075,0.237]	0.1	1.48
+eccDNA->Circle	10	10	10-shot	0.141	[0.062,0.237]	0.1	1.41
+Circle->eccDNA	11	1	one-shot	0.121	[0.045,0.205]	0.091	1.33
+Circle->eccDNA	11	5	5-shot	0.148	[0.080,0.227]	0.091	1.62
+Circle->eccDNA	11	10	10-shot	0.153	[0.080,0.227]	0.091	1.68

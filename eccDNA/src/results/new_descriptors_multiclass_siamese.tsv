@@ -1,0 +1,7 @@
+set	loss	within_acc	within_xcaso	cross_acc	cross_xcaso
+A: 10 descrittori	euclideo	0.162	1.46	0.128	1.15
+A: 10 descrittori	coseno	0.151	1.36	0.116	1.05
+A: 10 descrittori	triplet	0.159	1.44	0.129	1.16
+B: 10 + 8 nuovi	euclideo	0.176	1.58	0.141	1.27
+B: 10 + 8 nuovi	coseno	0.179	1.61	0.133	1.19
+B: 10 + 8 nuovi	triplet	0.159	1.43	0.135	1.22

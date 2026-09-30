@@ -1,0 +1,5 @@
+direzione	metodo	acc	bal_acc	AUC_medio
+eccDNABase->CircleBaseV2	baseline	0.195	0.195	0.544
+eccDNABase->CircleBaseV2	DANN	0.189	0.189	0.544
+CircleBaseV2->eccDNABase	baseline	0.19	0.19	0.557
+CircleBaseV2->eccDNABase	DANN	0.185	0.185	0.557

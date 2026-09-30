@@ -1,0 +1,5 @@
+tecnica	AUC_min_media	n_rilevabili	Hypopharynx
+baseline	0.565	3	0.768
+rango	0.558	3	0.775
+selezione	0.563	1	0.766
+rango+selezione	0.553	1	0.759

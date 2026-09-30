@@ -1,0 +1,13 @@
+loss	init	regime	within	within_x	cross	cross_x
+euclideo	da zero	one-shot	0.151	1.36	0.114	1.03
+euclideo	da zero	few-shot	0.185	1.66	0.123	1.11
+euclideo	pre-addestrato	one-shot	0.146	1.32	0.108	0.98
+euclideo	pre-addestrato	few-shot	0.173	1.56	0.114	1.02
+coseno	da zero	one-shot	0.17	1.53	0.121	1.09
+coseno	da zero	few-shot	0.199	1.79	0.125	1.13
+coseno	pre-addestrato	one-shot	0.165	1.49	0.119	1.07
+coseno	pre-addestrato	few-shot	0.198	1.78	0.126	1.13
+triplet	da zero	one-shot	0.135	1.22	0.113	1.01
+triplet	da zero	few-shot	0.155	1.4	0.111	1.0
+triplet	pre-addestrato	one-shot	0.14	1.26	0.109	0.98
+triplet	pre-addestrato	few-shot	0.164	1.48	0.11	0.99

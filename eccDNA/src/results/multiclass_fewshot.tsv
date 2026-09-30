@@ -1,0 +1,17 @@
+modello	n_way	k_shot	tipo	acc_media	acc_std	chance
+Prototipico coseno	5	1	one-shot	0.374	0.119	0.2
+Prototipico coseno	5	5	5-shot	0.463	0.106	0.2
+Prototipico coseno	17	1	one-shot	0.169	0.034	0.059
+Prototipico coseno	17	5	5-shot	0.223	0.028	0.059
+Prototipico euclideo	5	1	one-shot	0.356	0.11	0.2
+Prototipico euclideo	5	5	5-shot	0.444	0.098	0.2
+Prototipico euclideo	17	1	one-shot	0.142	0.034	0.059
+Prototipico euclideo	17	5	5-shot	0.207	0.03	0.059
+Triplet (batch-hard)	5	1	one-shot	0.253	0.07	0.2
+Triplet (batch-hard)	5	5	5-shot	0.308	0.072	0.2
+Triplet (batch-hard)	17	1	one-shot	0.091	0.022	0.059
+Triplet (batch-hard)	17	5	5-shot	0.106	0.022	0.059
+Contrastive (coppie)	5	1	one-shot	0.375	0.112	0.2
+Contrastive (coppie)	5	5	5-shot	0.432	0.106	0.2
+Contrastive (coppie)	17	1	one-shot	0.162	0.034	0.059
+Contrastive (coppie)	17	5	5-shot	0.208	0.027	0.059

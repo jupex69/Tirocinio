@@ -1,0 +1,5 @@
+rappresentazione	AUC	IC
+solo-lunghezza (controllo)	0.457	[0.400,0.512]
+74 tabellari	0.546	[0.489,0.604]
+74 + nuovi descrittori	0.549	[0.492,0.604]
+CNN sequenza grezza	0.528	[0.472,0.584]

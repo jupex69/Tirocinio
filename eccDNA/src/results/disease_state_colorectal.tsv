@@ -1,0 +1,7 @@
+modello	AUC	IC
+solo-lunghezza (controllo)	0.45	[0.399,0.500]
+RandomForest 74	0.596	[0.547,0.643]
+Softmax	0.569	[0.520,0.617]
+Siamese prototipico euclideo	0.587	[0.539,0.635]
+Siamese prototipico coseno	0.566	[0.516,0.615]
+Siamese triplet	0.531	[0.480,0.579]

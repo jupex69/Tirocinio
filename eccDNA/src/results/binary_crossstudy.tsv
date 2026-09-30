@@ -1,0 +1,6 @@
+valutazione	AUC
+within_study	0.797
+cross_ecc->CB2	0.671
+cross_CB2->ecc	0.757
+cross_media	0.714
+solo_lunghezza_cross	0.517

@@ -1,0 +1,4 @@
+livello	n_classi	accuracy	bal_acc	x_caso
+malattia	17	0.262	0.258	4.45
+malattia->tessuto (collasso)	11	0.361		3.97
+tessuto (diretto)	11	0.19	0.343	2.09

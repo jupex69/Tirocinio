@@ -1,0 +1,7 @@
+tessuto	AUC_ecc->CB2	AUC_CB2->ecc	AUC_min_robusto	rilevabile_cross_lab
+Hypopharynx	0.76	0.742	0.742	SI
+Ovarian	0.609	0.66	0.609	SI
+Stomach	0.605	0.581	0.581	debole
+Glioblastoma	0.621	0.51	0.51	no
+Prostate	0.506	0.496	0.496	no
+Colorectal	0.424	0.417	0.417	no

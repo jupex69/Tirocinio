@@ -1,0 +1,5 @@
+malattia	seq_ecc	seq_CB2	identiche	sovrapp_seq	len_med_ecc	len_med_CB2
+Colorectal Cancer	2012	4000	0	0.0	613	735
+Dilated Cardiomyopathy	1513	1515	0	0.0	256	256
+Primary Pulmonary Hypertension	4000	4000	0	0.0	150	151
+Prostate Cancer	3999	3999	0	0.0	352	299

@@ -1,0 +1,11 @@
+classe	recall_ecc->CB2	recall_CB2->ecc	recall_min
+Primary Pulmonary Hypertension	1.0	1.0	1.0
+Dilated Cardiomyopathy	0.996	0.998	0.996
+Healthy	0.739	0.752	0.739
+Hypopharynx Cancer	0.591	0.614	0.591
+Breast Cancer	1.0	0.373	0.373
+Glioblastoma	0.265	0.357	0.265
+Stomach Cancer	0.203	0.155	0.155
+Prostate Cancer	0.083	0.062	0.062
+Colorectal Cancer	0.092	0.039	0.039
+Ovarian Cancer	0.17	0.015	0.015

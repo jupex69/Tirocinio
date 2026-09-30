@@ -1,0 +1,5 @@
+modello	accuracy	bal_acc	macro_f1	x_caso
+RandomForest 74	0.264	0.268	0.235	2.38
+Softmax	0.226	0.228	0.219	2.04
+Siamese coseno	0.198	0.202	0.191	1.78
+Baseline solo-lunghezza	0.16	0.162	0.149	1.44

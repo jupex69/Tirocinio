@@ -1,0 +1,7 @@
+	Cervello/ATAC (Glioblastoma vs sano)	Cuore/Circle-seq (Cardiomiopatia vs sano)
+solo-lunghezza (controllo)	0.206	0.412
+RandomForest 74	0.684	0.55
+Softmax	0.64	0.55
+Siamese prototipico euclideo	0.58	0.555
+Siamese prototipico coseno	0.653	0.556
+Siamese triplet	0.578	0.562

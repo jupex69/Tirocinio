@@ -1,0 +1,13 @@
+set	loss	within_acc	within_F1	within_xcaso	cross_acc	cross_F1	cross_xcaso
+A: 10 descrittori	euclideo	0.205	0.183	1.85	0.137	0.141	1.23
+A: 10 descrittori	coseno	0.178	0.175	1.61	0.113	0.116	1.01
+A: 10 descrittori	triplet	0.192	0.173	1.73	0.128	0.129	1.15
+B: +3-mer (74)	euclideo	0.283	0.278	2.55	0.147	0.145	1.32
+B: +3-mer (74)	coseno	0.232	0.226	2.09	0.163	0.16	1.46
+B: +3-mer (74)	triplet	0.215	0.208	1.94	0.127	0.117	1.14
+C: +4-mer (330)	euclideo	0.246	0.252	2.21	0.192	0.188	1.73
+C: +4-mer (330)	coseno	0.266	0.268	2.39	0.179	0.169	1.61
+C: +4-mer (330)	triplet	0.205	0.201	1.85	0.153	0.151	1.38
+D: +5-mer (1354)	euclideo	0.249	0.256	2.24	0.198	0.184	1.78
+D: +5-mer (1354)	coseno	0.273	0.276	2.45	0.19	0.183	1.71
+D: +5-mer (1354)	triplet	0.165	0.154	1.48	0.149	0.135	1.34

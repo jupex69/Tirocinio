@@ -1,0 +1,10 @@
+malattia	recall_within	recall_cross
+Primary Pulmonary Hypertension	0.281	0.32
+Breast Cancer	0.317	0.307
+Dilated Cardiomyopathy	0.176	0.166
+Hypopharynx Cancer	0.152	0.149
+Glioblastoma	0.148	0.148
+Stomach Cancer	0.144	0.119
+Ovarian Cancer	0.172	0.095
+Prostate Cancer	0.149	0.078
+Colorectal Cancer	0.204	0.042

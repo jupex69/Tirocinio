@@ -1,0 +1,11 @@
+tessuto	k_shot	recall
+Cataract	1	0.317
+Colorectal	1	0.319
+Hypopharynx	1	0.258
+Prostate	1	0.287
+Stomach	1	0.274
+Cataract	5	0.438
+Colorectal	5	0.448
+Hypopharynx	5	0.317
+Prostate	5	0.257
+Stomach	5	0.312

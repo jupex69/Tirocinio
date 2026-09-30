@@ -1,0 +1,8 @@
+sistema	recall_RF	recall_siam_euclideo	recall_siam_coseno	recall_siam_triplet
+Cardiovascolare	0.936	0.437	0.391	0.368
+Mammella	0.684	0.511	0.496	0.414
+Testa-collo	0.631	0.21	0.194	0.172
+Sistema nervoso	0.294	0.175	0.19	0.177
+Gastrointestinale	0.159	0.089	0.111	0.114
+Urogenitale	0.13	0.117	0.121	0.139
+Ginecologico	0.098	0.096	0.122	0.107

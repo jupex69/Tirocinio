@@ -1,0 +1,10 @@
+malattia	recall	f1
+Colorectal Cancer	0.818	0.643
+Breast Cancer	0.5	0.429
+Stomach Cancer	0.5	0.414
+Dilated Cardiomyopathy	0.25	0.24
+Primary Pulmonary Hypertension	0.167	0.19
+Prostate Cancer	0.091	0.105
+Ovarian Cancer	0.083	0.095
+Hypopharynx Cancer	0.0	0.0
+Glioblastoma	0.0	0.0

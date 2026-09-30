@@ -1,0 +1,18 @@
+malattia	tessuto	recall	confusa_con	tess_conf	stesso_tessuto	stesso_db	conf_top1
+Breast cancer	Mammella	0.11	Liver cancer	Fegato	no	SI	0.37
+Caid syndrome	Altro	0.45	Primary pulmonary hypertension	Cardiovascolare	no	no	0.1
+Cataract	Occhio	0.03	Primary pulmonary hypertension	Cardiovascolare	no	SI	0.27
+Chronic kidney disease	Rene	0.31	Colorectal cancer	Colon-retto	no	no	0.21
+Colorectal adenoma	Colon-retto	0.4	Gastric cancer	Stomaco	no	no	0.23
+Colorectal cancer	Colon-retto	0.49	Chronic kidney disease	Rene	no	no	0.13
+Coronary artery disease	Cardiovascolare	0.04	Caid syndrome	Altro	no	SI	0.29
+Dilated cardiomyopathy	Cardiovascolare	0.01	Primary pulmonary hypertension	Cardiovascolare	SI	SI	0.22
+Gastric cancer	Stomaco	0.39	Colorectal adenoma	Colon-retto	no	no	0.19
+Glioblastoma cancer	Cervello	0.08	Gastric cancer	Stomaco	no	SI	0.22
+Hypopharyngeal squamous cell carcinoma	Ipofaringe	0.0	Primary pulmonary hypertension	Cardiovascolare	no	SI	0.2
+Hypopharynx cancer	Ipofaringe	0.09	Primary pulmonary hypertension	Cardiovascolare	no	no	0.24
+Liver cancer	Fegato	0.22	Colorectal cancer	Colon-retto	no	no	0.13
+Primary pulmonary hypertension	Cardiovascolare	0.62	Stomach	Stomaco	no	SI	0.1
+Stomach	Stomaco	0.19	Hypopharynx cancer	Ipofaringe	no	no	0.16
+Stomach cancer	Stomaco	0.08	Stomach	Stomaco	SI	no	0.18
+Systemic lupus erythematosus	Immunitario	0.87	Colorectal adenoma	Colon-retto	no	no	0.04

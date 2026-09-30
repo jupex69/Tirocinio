@@ -1,0 +1,4 @@
+set	within_acc	within_xcaso	cross_acc	cross_F1	cross_xcaso
+A: 10 descrittori	0.236	2.12	0.232	0.224	2.08
+B: 10 + 8 nuovi	0.273	2.45	0.216	0.204	1.94
+C: solo 8 nuovi	0.276	2.48	0.207	0.193	1.86

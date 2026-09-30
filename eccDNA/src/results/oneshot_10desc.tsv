@@ -1,0 +1,5 @@
+loss	within_1shot	within_+transd	cross_1shot	cross_+transd
+raw	0.164	0.164	0.128	0.126
+euclideo	0.165	0.173	0.133	0.144
+coseno	0.194	0.19	0.157	0.159
+triplet	0.166	0.171	0.139	0.141

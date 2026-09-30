@@ -1,0 +1,7 @@
+metrica	valore
+accuracy	0.401
+balanced_accuracy	0.316
+macro_f1	0.309
+top3	0.594
+x_chance	11.63
+n_classi	29.0

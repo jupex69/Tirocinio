@@ -1,0 +1,7 @@
+tessuto	AUC_ecc->CB2	IC_ecc	AUC_CB2->ecc	IC_CB2	IC_min_basso	CERTIFICATO
+Hypopharynx	0.775	[0.750,0.800]	0.768	[0.753,0.784]	0.75	SI
+Stomach	0.632	[0.607,0.659]	0.609	[0.592,0.625]	0.592	SI
+Ovarian	0.612	[0.586,0.638]	0.679	[0.663,0.696]	0.586	SI
+Glioblastoma	0.646	[0.617,0.674]	0.534	[0.514,0.555]	0.514	SI
+Prostate	0.51	[0.482,0.540]	0.483	[0.466,0.501]	0.466	no
+Colorectal	0.395	[0.368,0.425]	0.386	[0.370,0.404]	0.368	no

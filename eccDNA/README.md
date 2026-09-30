@@ -14,9 +14,27 @@ metodo di sequenziamento, studio di origine): nel dataset grezzo l'etichetta di
 malattia è quasi allineata a queste variabili tecniche, e separare le malattie
 senza controlli significa in gran parte riconoscere il *batch*, non la biologia.
 
-Il documento di tesi (`tesi_descrittori_validazione.tex` → PDF, ignorato da git)
-raccoglie l'intero lavoro: abstract → descrittori → confondenti → binario →
-multiclasse → conclusioni.
+## Struttura del repository
+
+- **`src/`** — tutto il codice Python (librerie, pipeline ed esperimenti). Gli script
+  si importano a vicenda, quindi vanno eseguiti **da dentro `src/`**. Qui vivono, solo
+  in locale, anche i dati (`src/data/`, ignorati da git) e i risultati
+  (`src/results/*.tsv`, con indice in `src/results/README.md`).
+- **`model/`** — i due modelli pronti all'uso in formato `.joblib` più `predict.py`
+  per usarli su una sequenza; dettagli in `model/README.md`.
+
+Il documento di tesi (`tesi_Annunziata_Giuseppe`, PDF) e la relazione di tirocinio
+sono tenuti **fuori** dal repository (restano in locale, ignorati da git).
+
+## Modello pronto all'uso
+
+Nella cartella `model/` ci sono due RandomForest già addestrati sui 10 descrittori:
+`binary_presence_rf.joblib` (sano vs malato, che **generalizza** a un nuovo studio) e
+`multiclass_disease_rf.joblib` (quale malattia, utile solo entro lo stesso studio).
+
+```bash
+python model/predict.py --model binary --seq ACGT...
+```
 
 Per la descrizione del dataset grezzo (colonne, split, valori mancanti) vedi
 `../README_disease_detection.md`, scritto dal tutor.
@@ -35,11 +53,11 @@ pip install torch --index-url https://download.pytorch.org/whl/cpu
 ## 2. Dati necessari (non su git)
 
 I file grezzi sono troppo grandi per essere versionati. Vanno messi in
-`data/processed/` prima di eseguire qualunque script:
+`src/data/processed/` prima di eseguire qualunque script:
 
 ```text
-data/processed/eccdna_disease_detection_metadata.tsv   (metadati completi, ~1.3 GB)
-data/processed/eccdna_disease_detection.body.fa        (sequenze, ~6.5 GB)
+src/data/processed/eccdna_disease_detection_metadata.tsv   (metadati completi, ~1.3 GB)
+src/data/processed/eccdna_disease_detection.body.fa        (sequenze, ~6.5 GB)
 ```
 
 `eccdna_metadata_CLEAN.tsv`, `eccdna_descriptor_features.tsv`,

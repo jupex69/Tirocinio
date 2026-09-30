@@ -1,0 +1,5 @@
+modello	within_study	cross_study	ecc->CB2	CB2->ecc	x_caso_cross	calo
+RF	0.349	0.29	0.401	0.178	9.27	0.059
+euclideo	0.166	0.095	0.102	0.089	3.05	0.071
+coseno	0.173	0.104	0.117	0.092	3.33	0.069
+triplet	0.101	0.055	0.049	0.061	1.75	0.046
